@@ -1,0 +1,4 @@
+node_modules/
+*.db
+bookings.json
+bookings.json.backup

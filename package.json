@@ -1,0 +1,13 @@
+{
+  "name": "spine-clinic-booking",
+  "version": "1.0.0",
+  "description": "脊柱侧弯门诊预约系统",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "express": "^4.21.0",
+    "sql.js": "^1.11.0"
+  }
+}
