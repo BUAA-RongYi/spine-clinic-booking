@@ -152,6 +152,7 @@ app.get('/api/availability', (req, res) => {
 
   const countMap = {};
   const stmt = db.prepare('SELECT time_slot, COUNT(*) as cnt FROM appointments WHERE appt_date = ? GROUP BY time_slot');
+  stmt.bind([date]);
   const rows = [];
   while (stmt.step()) rows.push(stmt.getAsObject());
   stmt.free();
