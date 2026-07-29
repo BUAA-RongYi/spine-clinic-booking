@@ -37,9 +37,21 @@ function todayStr() { return ymd(new Date()); }
 async function api(method, path, body) {
   const opts = { method, headers: { 'Content-Type': 'application/json' } };
   if (body) opts.body = JSON.stringify(body);
-  const res = await fetch(path, opts);
-  const data = await res.json();
-  if (!res.ok) throw new Error(data.error || '请求失败');
+  let res;
+  try {
+    res = await fetch(path, opts);
+  } catch (e) {
+    throw new Error('网络连接失败，请检查网络后重试');
+  }
+  // Try to parse JSON — if fail, give a clear error
+  const text = await res.text();
+  let data;
+  try {
+    data = JSON.parse(text);
+  } catch {
+    throw new Error(`服务器返回异常 (${res.status})，请刷新页面后重试`);
+  }
+  if (!res.ok) throw new Error(data.error || `请求失败 (${res.status})`);
   return data;
 }
 

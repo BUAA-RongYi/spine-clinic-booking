@@ -126,10 +126,7 @@ function nowStr() {
 }
 
 // ── Health check ──────────────────────────────────────────────────────────────
-// (defined above, before static)
-
-// ── Static files ──────────────────────────────────────────────────────────────
-app.use(express.static(path.join(__dirname, 'public')));
+// (defined above)
 
 // ── API Routes ────────────────────────────────────────────────────────────────
 
@@ -371,7 +368,15 @@ app.get('/api/admin/appointments', (req, res) => {
   res.json({ appointments: rows });
 });
 
-// Fallback
+// ── Static files (after all API routes) ────────────────────────────────────────
+app.use(express.static(path.join(__dirname, 'public')));
+
+// API 404 — return JSON, not HTML
+app.all('/api/*', (req, res) => {
+  res.status(404).json({ error: `接口不存在: ${req.method} ${req.path}` });
+});
+
+// SPA fallback — all other routes go to index.html
 app.get('*', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
