@@ -26,6 +26,19 @@
   <!-- ════════════════════════════════════════════════════════════ -->
   <main id="tab-booking" class="tab-content active">
 
+    <!-- 预约须知 -->
+    <div class="notice-card">
+      <div class="notice-header">📋 预约须知</div>
+      <div class="notice-body">
+        <ol class="notice-list">
+          <li>开放<strong>30天内</strong>号源（含当天），每天<strong>5个时段</strong>：上午 8:30-9:30 / 9:30-10:30 / 10:30-11:30；下午 15:00-16:00 / 16:00-17:00，每时段<strong>限额8人</strong></li>
+          <li><strong>同一手机号每天限约1次</strong>，同一姓名同一时段不可重复预约</li>
+          <li>修改或取消预约需在<strong>时段开始前2小时</strong>完成，逾期不可操作</li>
+          <li>如遇门诊停诊，管理员将屏蔽对应日期/时段，届时显示<strong>"已屏蔽"</strong>不可预约</li>
+        </ol>
+      </div>
+    </div>
+
     <!-- Calendar -->
     <div class="calendar-card">
       <div class="calendar-header">
@@ -164,6 +177,7 @@
         </div>
         <button id="btn-admin-query" class="btn-primary">查询</button>
         <button id="btn-admin-all" class="btn-outline" style="margin-top:8px;">查看全部记录</button>
+        <button id="btn-admin-export" class="btn-outline" style="margin-top:4px;color:var(--green);border-color:var(--green-bg);">📥 导出本月Excel</button>
         <button id="btn-admin-logout" class="btn-outline" style="margin-top:4px;color:var(--red);border-color:var(--red-bg);">退出管理</button>
       </div>
 

@@ -589,7 +589,7 @@ function updateAdminUI() {
 async function autoLoadAdmin() {
   updateAdminUI();
   if (isAdminVerified()) {
-    await loadAdminData(null);
+    await loadAdminData(todayStr());
     await loadBlockedDates();
   }
 }
@@ -614,7 +614,7 @@ document.getElementById('btn-admin-verify').addEventListener('click', async () =
     const data = await api('POST', '/api/admin/verify', { password });
     sessionStorage.setItem('admin_token', data.token);
     updateAdminUI();
-    await loadAdminData(null);
+    await loadAdminData(todayStr());
     document.getElementById('admin-password').value = '';
   } catch (e) {
     errEl.textContent = e.message;
@@ -637,6 +637,44 @@ document.getElementById('block-date').addEventListener('keydown', (e) => {
 });
 document.getElementById('block-session').addEventListener('keydown', (e) => {
   if (e.key === 'Enter') addBlockedDate();
+});
+
+// Export to Excel
+document.getElementById('btn-admin-export').addEventListener('click', async () => {
+  const btn = document.getElementById('btn-admin-export');
+  btn.disabled = true;
+  btn.textContent = '导出中...';
+
+  try {
+    const data = await api('GET', '/api/admin/appointments');
+    if (!data.appointments.length) { toast('暂无预约记录可导出', 'error'); return; }
+
+    // Build CSV with BOM for Excel Chinese support
+    const BOM = '﻿';
+    const header = '日期,时间段,姓名,手机号,创建时间';
+    const rows = data.appointments.map(a =>
+      `${a.appt_date},${a.time_slot},${a.name},${a.phone},${a.created_at}`
+    );
+    const csv = BOM + header + '\n' + rows.join('\n');
+
+    // Download
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    const now = new Date();
+    const ym = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}`;
+    a.download = `预约记录_${ym}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+
+    toast('✅ 导出成功', 'success');
+  } catch (e) {
+    toast(e.message, 'error');
+  } finally {
+    btn.disabled = false;
+    btn.textContent = '📥 导出本月Excel';
+  }
 });
 
 // Logout
@@ -675,44 +713,82 @@ async function loadAdminData(date) {
 
     // Group by date if showing all
     if (!date) {
+      const slotOrder = ['8:30-9:30', '9:30-10:30', '10:30-11:30', '15:00-16:00', '16:00-17:00'];
       const groups = {};
+      let monthTotal = 0;
+      const now = new Date();
+      const currentMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+
       for (const a of data.appointments) {
         if (!groups[a.appt_date]) groups[a.appt_date] = [];
         groups[a.appt_date].push(a);
+        if (a.appt_date.startsWith(currentMonth)) monthTotal++;
       }
       const dates = Object.keys(groups).sort().reverse();
 
-      wrap.innerHTML = dates.map((d) => {
-        const rows = groups[d].map((a, i) => `
-          <tr>
-            <td>${i + 1}</td>
-            <td>${a.time_slot}</td>
-            <td>${a.name}</td>
-            <td>${a.phone}</td>
-          </tr>`).join('');
-        return `
-          <div class="admin-summary">📅 <strong>${d}</strong> · 共 ${groups[d].length} 人预约</div>
-          <table class="admin-table">
-            <thead><tr><th>#</th><th>时间段</th><th>姓名</th><th>手机号</th></tr></thead>
-            <tbody>${rows}</tbody>
-          </table>
-          <div style="height:12px;"></div>`;
+      // Monthly summary card
+      wrap.innerHTML = `<div class="month-summary">
+        📊 <strong>${currentMonth}月</strong> · 共 <strong>${monthTotal}</strong> 人预约
+        </div>`;
+
+      wrap.innerHTML += dates.map((d) => {
+        // Group this date's appointments by time slot
+        const slotGroups = {};
+        for (const a of groups[d]) {
+          if (!slotGroups[a.time_slot]) slotGroups[a.time_slot] = [];
+          slotGroups[a.time_slot].push(a);
+        }
+
+        let html = `<div class="admin-summary">📅 <strong>${d}</strong> · 共 ${groups[d].length} 人预约</div>`;
+
+        for (const slot of slotOrder) {
+          const list = slotGroups[slot] || [];
+          html += `<div class="slot-group">`;
+          html += `<div class="slot-group-header">🕐 <strong>${slot}</strong> · ${list.length}人</div>`;
+          if (list.length > 0) {
+            html += `<table class="admin-table slot-table">
+              <thead><tr><th>#</th><th>姓名</th><th>手机号</th></tr></thead>
+              <tbody>`;
+            html += list.map((a, i) => `
+              <tr><td>${i + 1}</td><td>${a.name}</td><td>${a.phone}</td></tr>`).join('');
+            html += `</tbody></table>`;
+          } else {
+            html += `<div class="slot-empty">暂无预约</div>`;
+          }
+          html += `</div>`;
+        }
+        html += '<div style="height:12px;"></div>';
+        return html;
       }).join('');
     } else {
-      const rows = data.appointments.map((a, i) => `
-        <tr>
-          <td>${i + 1}</td>
-          <td>${a.time_slot}</td>
-          <td>${a.name}</td>
-          <td>${a.phone}</td>
-        </tr>`).join('');
+      // Group by time slot for single-date view
+      const slotOrder = ['8:30-9:30', '9:30-10:30', '10:30-11:30', '15:00-16:00', '16:00-17:00'];
+      const slotGroups = {};
+      for (const a of data.appointments) {
+        if (!slotGroups[a.time_slot]) slotGroups[a.time_slot] = [];
+        slotGroups[a.time_slot].push(a);
+      }
 
-      wrap.innerHTML = `
-        <div class="admin-summary">📅 <strong>${date}</strong> · 共 ${data.appointments.length} 人预约</div>
-        <table class="admin-table">
-          <thead><tr><th>#</th><th>时间段</th><th>姓名</th><th>手机号</th></tr></thead>
-          <tbody>${rows}</tbody>
-        </table>`;
+      let html = `<div class="admin-summary">📅 <strong>${date}</strong> · 共 ${data.appointments.length} 人预约</div>`;
+
+      for (const slot of slotOrder) {
+        const list = slotGroups[slot] || [];
+        html += `<div class="slot-group">`;
+        html += `<div class="slot-group-header">🕐 <strong>${slot}</strong> · ${list.length}人</div>`;
+        if (list.length > 0) {
+          html += `<table class="admin-table slot-table">
+            <thead><tr><th>#</th><th>姓名</th><th>手机号</th></tr></thead>
+            <tbody>`;
+          html += list.map((a, i) => `
+            <tr><td>${i + 1}</td><td>${a.name}</td><td>${a.phone}</td></tr>`).join('');
+          html += `</tbody></table>`;
+        } else {
+          html += `<div class="slot-empty">暂无预约</div>`;
+        }
+        html += `</div>`;
+      }
+
+      wrap.innerHTML = html;
     }
   } catch (e) {
     toast(e.message, 'error');
