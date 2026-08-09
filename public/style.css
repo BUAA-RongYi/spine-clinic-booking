@@ -160,8 +160,9 @@ body {
   border-radius: 50%;
   margin-top: 2px;
 }
-.cal-dot.avail { background: var(--green); }
-.cal-dot.full  { background: var(--gray-400); }
+.cal-dot.avail     { background: var(--green); }
+.cal-dot.full      { background: var(--gray-400); }
+.cal-dot.blocked   { background: var(--orange); }
 
 .calendar-legend {
   display: flex; gap: 16px; justify-content: center;
@@ -169,9 +170,10 @@ body {
 }
 .calendar-legend span { display: flex; align-items: center; gap: 4px; }
 .dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; }
-.dot.green { background: var(--green); }
-.dot.gray  { background: var(--gray-400); }
-.dot.none  { background: var(--gray-200); }
+.dot.green  { background: var(--green); }
+.dot.gray   { background: var(--gray-400); }
+.dot.orange { background: var(--orange); }
+.dot.none   { background: var(--gray-200); }
 
 /* ── Slots card ──────────────────────────────────────────────────────────── */
 .slots-card {
@@ -425,6 +427,64 @@ body {
 .app-footer {
   text-align: center; padding: 8px 16px;
   font-size: 12px; color: var(--gray-400);
+}
+
+/* ── Blocked Dates Management ─────────────────────────────────────────────── */
+.block-form-row {
+  display: flex;
+  gap: 8px;
+}
+.block-form-row .form-group {
+  flex: 1;
+}
+
+.blocked-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.blocked-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 14px;
+  background: var(--orange-bg);
+  border-radius: var(--radius-sm);
+  border: 1px solid #fed7aa;
+}
+
+.blocked-info {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  font-size: 14px;
+}
+
+.blocked-date {
+  font-weight: 600;
+  color: var(--gray-700);
+}
+
+.blocked-session-tag {
+  font-size: 12px;
+  color: var(--orange);
+  background: #fff;
+  padding: 2px 8px;
+  border-radius: 10px;
+  font-weight: 600;
+}
+
+/* Blocked slot indicator */
+.slot-item.blocked {
+  border-color: var(--orange);
+  background: var(--orange-bg);
+  color: var(--gray-500);
+  cursor: not-allowed;
+  pointer-events: none;
+}
+.slot-item.blocked .slot-remaining .num {
+  color: var(--orange);
 }
 
 /* ── Responsive: slightly wider screens ──────────────────────────────────── */

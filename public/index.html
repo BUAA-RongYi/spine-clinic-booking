@@ -40,6 +40,7 @@
       <div class="calendar-legend">
         <span><i class="dot green"></i> 可预约</span>
         <span><i class="dot gray"></i> 已约满</span>
+        <span><i class="dot orange"></i> 已屏蔽</span>
         <span><i class="dot none"></i> 不可约</span>
       </div>
     </div>
@@ -188,6 +189,30 @@
       </div>
 
       <div id="admin-table-wrap" class="admin-table-wrap"></div>
+
+      <!-- Blocked dates management -->
+      <div class="admin-card" style="margin-top:16px;">
+        <h3 style="font-size:16px;font-weight:700;margin-bottom:8px;color:var(--gray-800);">🚫 屏蔽日期管理</h3>
+        <p style="font-size:13px;color:var(--gray-400);margin-bottom:12px;">屏蔽后，对应时段的号源将对患者不可见</p>
+
+        <div class="block-form-row">
+          <div class="form-group" style="flex:1;margin-bottom:0;">
+            <label style="font-size:13px;">屏蔽日期</label>
+            <input type="date" id="block-date">
+          </div>
+          <div class="form-group" style="flex:1;margin-bottom:0;">
+            <label style="font-size:13px;">屏蔽时段</label>
+            <select id="block-session">
+              <option value="morning">上午 (8:30-11:30)</option>
+              <option value="afternoon">下午 (15:00-17:00)</option>
+              <option value="all_day">全天</option>
+            </select>
+          </div>
+        </div>
+        <button id="btn-add-block" class="btn-primary" style="margin-top:12px;">添加屏蔽</button>
+
+        <div id="blocked-list" class="blocked-list" style="margin-top:16px;"></div>
+      </div>
     </div>
   </main>
 

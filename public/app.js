@@ -165,8 +165,12 @@ async function renderCalendar() {
     cell.innerHTML = `<span class="cal-day-num">${d}</span>`;
 
     if (info && info.inRange) {
-      const dotClass = info.available ? 'avail' : 'full';
-      cell.innerHTML += `<span class="cal-dot ${dotClass}"></span>`;
+      if (info.blocked && !info.available) {
+        cell.innerHTML += '<span class="cal-dot blocked"></span>';
+      } else {
+        const dotClass = info.available ? 'avail' : 'full';
+        cell.innerHTML += `<span class="cal-dot ${dotClass}"></span>`;
+      }
     }
 
     grid.appendChild(cell);
@@ -209,12 +213,25 @@ async function renderSlots(dateStr) {
 
   for (const slot of data.slots) {
     const div = document.createElement('div');
-    div.className = `slot-item ${slot.full ? 'full' : 'available'}`;
-    div.innerHTML = `
-      <span class="slot-time">${slot.label}</span>
-      <span class="slot-remaining">剩余 <span class="num">${slot.remaining}</span> 人</span>
-    `;
-    if (!slot.full) {
+
+    if (slot.blocked) {
+      div.className = 'slot-item blocked';
+      div.innerHTML = `
+        <span class="slot-time">${slot.label}</span>
+        <span class="slot-remaining">🚫 <span class="num">已屏蔽</span></span>
+      `;
+    } else if (slot.full) {
+      div.className = 'slot-item full';
+      div.innerHTML = `
+        <span class="slot-time">${slot.label}</span>
+        <span class="slot-remaining">剩余 <span class="num">${slot.remaining}</span> 人</span>
+      `;
+    } else {
+      div.className = 'slot-item available';
+      div.innerHTML = `
+        <span class="slot-time">${slot.label}</span>
+        <span class="slot-remaining">剩余 <span class="num">${slot.remaining}</span> 人</span>
+      `;
       div.addEventListener('click', () => openBookingForm(dateStr, slot));
     }
     list.appendChild(div);
@@ -573,6 +590,7 @@ async function autoLoadAdmin() {
   updateAdminUI();
   if (isAdminVerified()) {
     await loadAdminData(null);
+    await loadBlockedDates();
   }
 }
 
@@ -610,6 +628,15 @@ document.getElementById('btn-admin-verify').addEventListener('click', async () =
 // Enter key triggers verify
 document.getElementById('admin-password').addEventListener('keydown', (e) => {
   if (e.key === 'Enter') document.getElementById('btn-admin-verify').click();
+});
+
+// Blocked dates management
+document.getElementById('btn-add-block').addEventListener('click', addBlockedDate);
+document.getElementById('block-date').addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') addBlockedDate();
+});
+document.getElementById('block-session').addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') addBlockedDate();
 });
 
 // Logout
@@ -694,12 +721,83 @@ async function loadAdminData(date) {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
+// BLOCKED DATES MANAGEMENT (Admin)
+// ═══════════════════════════════════════════════════════════════════════════
+
+async function loadBlockedDates() {
+  const list = document.getElementById('blocked-list');
+  try {
+    const data = await api('GET', '/api/admin/blocked-dates');
+    if (!data.blockedDates.length) {
+      list.innerHTML = '<div style="text-align:center;color:var(--gray-400);padding:12px;font-size:14px;">暂无屏蔽日期</div>';
+      return;
+    }
+
+    const sessionLabels = { morning: '上午', afternoon: '下午', all_day: '全天' };
+
+    list.innerHTML = data.blockedDates.map(b => `
+      <div class="blocked-item">
+        <div class="blocked-info">
+          <span class="blocked-date">📅 ${b.block_date}</span>
+          <span class="blocked-session-tag">${sessionLabels[b.session] || b.session}</span>
+        </div>
+        <button class="btn-sm cancel" onclick="removeBlockedDate(${b.id})">移除</button>
+      </div>
+    `).join('');
+  } catch (e) {
+    toast(e.message, 'error');
+    list.innerHTML = '';
+  }
+}
+
+async function addBlockedDate() {
+  const date = document.getElementById('block-date').value;
+  const session = document.getElementById('block-session').value;
+  if (!date) return toast('请选择屏蔽日期', 'error');
+
+  const btn = document.getElementById('btn-add-block');
+  btn.disabled = true;
+  btn.textContent = '添加中...';
+
+  try {
+    await api('POST', '/api/admin/blocked-dates', { date, session });
+    toast('✅ 屏蔽设置成功', 'success');
+    document.getElementById('block-date').value = todayStr();
+    await loadBlockedDates();
+    if (state.currentTab === 'booking') await renderCalendar();
+  } catch (e) {
+    toast(e.message, 'error');
+  } finally {
+    btn.disabled = false;
+    btn.textContent = '添加屏蔽';
+  }
+}
+
+async function removeBlockedDate(id) {
+  if (!confirm('确定要移除此屏蔽吗？')) return;
+  try {
+    await api('DELETE', `/api/admin/blocked-dates/${id}`);
+    toast('✅ 已取消屏蔽', 'success');
+    await loadBlockedDates();
+    if (state.currentTab === 'booking') await renderCalendar();
+  } catch (e) {
+    toast(e.message, 'error');
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
 // INIT
 // ═══════════════════════════════════════════════════════════════════════════
 
 function init() {
   prefillUser();
   renderCalendar();
+  // Set block-date defaults for admin panel
+  const blockDateInput = document.getElementById('block-date');
+  if (blockDateInput) {
+    blockDateInput.setAttribute('min', todayStr());
+    blockDateInput.value = todayStr();
+  }
 }
 
 init();

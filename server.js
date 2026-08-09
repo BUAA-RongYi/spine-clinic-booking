@@ -19,11 +19,11 @@ app.get('/api/health', (req, res) => {
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 const TIME_SLOTS = [
-  { label: '8:30-9:30',   key: '08:30-09:30', startHour: 8,  startMin: 30 },
-  { label: '9:30-10:30',  key: '09:30-10:30', startHour: 9,  startMin: 30 },
-  { label: '10:30-11:30', key: '10:30-11:30', startHour: 10, startMin: 30 },
-  { label: '15:00-16:00', key: '15:00-16:00', startHour: 15, startMin: 0  },
-  { label: '16:00-17:00', key: '16:00-17:00', startHour: 16, startMin: 0  },
+  { label: '8:30-9:30',   key: '08:30-09:30', startHour: 8,  startMin: 30, session: 'morning' },
+  { label: '9:30-10:30',  key: '09:30-10:30', startHour: 9,  startMin: 30, session: 'morning' },
+  { label: '10:30-11:30', key: '10:30-11:30', startHour: 10, startMin: 30, session: 'morning' },
+  { label: '15:00-16:00', key: '15:00-16:00', startHour: 15, startMin: 0,  session: 'afternoon' },
+  { label: '16:00-17:00', key: '16:00-17:00', startHour: 16, startMin: 0,  session: 'afternoon' },
 ];
 
 const MAX_PER_SLOT = 8;
@@ -78,6 +78,13 @@ async function initDB() {
     time_slot   TEXT    NOT NULL,
     created_at  TEXT    NOT NULL,
     updated_at  TEXT    NOT NULL
+  )`);
+  db.run(`CREATE TABLE IF NOT EXISTS blocked_dates (
+    id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    block_date TEXT    NOT NULL,
+    session    TEXT    NOT NULL CHECK(session IN ('morning','afternoon','all_day')),
+    created_at TEXT    NOT NULL,
+    UNIQUE(block_date, session)
   )`);
   persistDB();
   maybeMigrate();
@@ -153,12 +160,33 @@ app.get('/api/availability', (req, res) => {
   const countMap = {};
   const stmt = db.prepare('SELECT time_slot, COUNT(*) as cnt FROM appointments WHERE appt_date = ? GROUP BY time_slot');
   stmt.bind([date]);
-  const rows = [];
-  while (stmt.step()) rows.push(stmt.getAsObject());
+  while (stmt.step()) {
+    const row = stmt.getAsObject();
+    countMap[row.time_slot] = row.cnt;
+  }
   stmt.free();
-  for (const row of rows) countMap[row.time_slot] = row.cnt;
 
-  const slots = TIME_SLOTS.map((s) => {
+  // Query blocked sessions for this date
+  const blockStmt = db.prepare('SELECT session FROM blocked_dates WHERE block_date = ?');
+  blockStmt.bind([date]);
+  const blockedSessions = new Set();
+  while (blockStmt.step()) blockedSessions.add(blockStmt.getAsObject().session);
+  blockStmt.free();
+
+  const isAllDayBlocked = blockedSessions.has('all_day');
+  const isMorningBlocked = blockedSessions.has('morning');
+  const isAfternoonBlocked = blockedSessions.has('afternoon');
+
+  const slots = TIME_SLOTS.map((s, idx) => {
+    const isMorningSlot = idx <= 2;
+    const slotBlocked = isAllDayBlocked ||
+      (isMorningSlot && isMorningBlocked) ||
+      (!isMorningSlot && isAfternoonBlocked);
+
+    if (slotBlocked) {
+      return { label: s.label, remaining: 0, full: true, blocked: true };
+    }
+
     const booked = countMap[s.label] || 0;
     return {
       label: s.label,
@@ -167,7 +195,7 @@ app.get('/api/availability', (req, res) => {
     };
   });
 
-  const totalRemaining = slots.reduce((sum, s) => sum + s.remaining, 0);
+  const totalRemaining = slots.reduce((sum, s) => sum + (s.blocked ? 0 : s.remaining), 0);
   res.json({ date, outOfRange: false, slots, totalRemaining });
 });
 
@@ -181,30 +209,68 @@ app.get('/api/availability/month', (req, res) => {
 
   const { min, max } = getDateRange();
   const daysInMonth = new Date(year, month, 0).getDate();
-
-  const totalMap = {};
   const monthStart = `${year}-${String(month).padStart(2, '0')}-01`;
   const monthEnd = `${year}-${String(month).padStart(2, '0')}-${String(daysInMonth).padStart(2, '0')}`;
-  const stmt = db.prepare('SELECT appt_date, COUNT(*) as cnt FROM appointments WHERE appt_date BETWEEN ? AND ? GROUP BY appt_date');
-  stmt.bind([monthStart, monthEnd]);
-  while (stmt.step()) {
-    const row = stmt.getAsObject();
-    totalMap[row.appt_date] = row.cnt;
+
+  // Query per-slot booking counts
+  const slotMap = {};
+  const slotStmt = db.prepare('SELECT appt_date, time_slot, COUNT(*) as cnt FROM appointments WHERE appt_date BETWEEN ? AND ? GROUP BY appt_date, time_slot');
+  slotStmt.bind([monthStart, monthEnd]);
+  while (slotStmt.step()) {
+    const row = slotStmt.getAsObject();
+    if (!slotMap[row.appt_date]) slotMap[row.appt_date] = {};
+    slotMap[row.appt_date][row.time_slot] = row.cnt;
   }
-  stmt.free();
+  slotStmt.free();
+
+  // Query blocked dates
+  const blockedMap = {};
+  const blockStmt = db.prepare('SELECT block_date, session FROM blocked_dates WHERE block_date BETWEEN ? AND ?');
+  blockStmt.bind([monthStart, monthEnd]);
+  while (blockStmt.step()) {
+    const row = blockStmt.getAsObject();
+    if (!blockedMap[row.block_date]) blockedMap[row.block_date] = new Set();
+    blockedMap[row.block_date].add(row.session);
+  }
+  blockStmt.free();
 
   const days = [];
-  const maxSlots = MAX_PER_SLOT * TIME_SLOTS.length;
   for (let d = 1; d <= daysInMonth; d++) {
     const dateStr = `${year}-${String(month).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
     const inRange = dateStr >= min && dateStr <= max;
+
     if (!inRange) {
       days.push({ date: dateStr, inRange: false, available: false, totalRemaining: 0 });
-    } else {
-      const booked = totalMap[dateStr] || 0;
-      const totalRemaining = Math.max(0, maxSlots - booked);
-      days.push({ date: dateStr, inRange: true, available: totalRemaining > 0, totalRemaining });
+      continue;
     }
+
+    const bSessions = blockedMap[dateStr] || new Set();
+    const isAllDay = bSessions.has('all_day');
+    const isMorningB = bSessions.has('morning');
+    const isAfternoonB = bSessions.has('afternoon');
+    const isFullyBlocked = isAllDay || (isMorningB && isAfternoonB);
+
+    if (isFullyBlocked) {
+      days.push({ date: dateStr, inRange: true, available: false, totalRemaining: 0, blocked: true });
+      continue;
+    }
+
+    const dateSlots = slotMap[dateStr] || {};
+    let totalRemaining = 0;
+    for (let i = 0; i < TIME_SLOTS.length; i++) {
+      const slot = TIME_SLOTS[i];
+      const isMorning = i <= 2;
+      if ((isMorning && isMorningB) || (!isMorning && isAfternoonB)) continue;
+      const booked = dateSlots[slot.label] || 0;
+      totalRemaining += Math.max(0, MAX_PER_SLOT - booked);
+    }
+
+    const isPartial = isMorningB || isAfternoonB;
+    days.push({
+      date: dateStr, inRange: true,
+      available: totalRemaining > 0, totalRemaining,
+      blocked: isPartial || undefined
+    });
   }
   res.json({ year, month, days, min, max });
 });
@@ -245,6 +311,28 @@ app.post('/api/appointments', (req, res) => {
   if (dupExists) {
     return res.status(400).json({ error: `"${name}" 已预约了该日期的 ${timeSlot} 时间段，请勿重复预约` });
   }
+
+  // Check phone uniqueness per day (one phone = one slot per day)
+  const phoneRow = db.prepare('SELECT time_slot FROM appointments WHERE appt_date = ? AND phone = ?');
+  phoneRow.bind([date, phone]);
+  if (phoneRow.step()) {
+    const existing = phoneRow.getAsObject();
+    phoneRow.free();
+    return res.status(400).json({
+      error: `该手机号在${date}已预约了 ${existing.time_slot}，一天只能预约一个时间段`
+    });
+  }
+  phoneRow.free();
+
+  // Check if date/session is blocked
+  const session = TIME_SLOTS.find(s => s.label === timeSlot).session;
+  const blockCheck = db.prepare('SELECT id FROM blocked_dates WHERE block_date = ? AND session IN (?, ?)');
+  blockCheck.bind([date, session, 'all_day']);
+  if (blockCheck.step()) {
+    blockCheck.free();
+    return res.status(400).json({ error: '该时段已被管理员关闭，无法预约' });
+  }
+  blockCheck.free();
 
   const ts = nowStr();
   db.run('INSERT INTO appointments (name, phone, appt_date, time_slot, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)',
@@ -319,6 +407,19 @@ app.put('/api/appointments/:id', (req, res) => {
     dStmt.bind([newDate, newSlot, newName, id]);
     if (dStmt.step()) { dStmt.free(); return res.status(400).json({ error: `"${newName}" 已存在于目标时间段` }); }
     dStmt.free();
+
+    // Check phone uniqueness per day (exclude self)
+    const pStmt = db.prepare('SELECT id FROM appointments WHERE appt_date = ? AND phone = ? AND id != ?');
+    pStmt.bind([newDate, newPhone, id]);
+    if (pStmt.step()) { pStmt.free(); return res.status(400).json({ error: '该手机号当天已预约过，一天只能预约一个时间段' }); }
+    pStmt.free();
+
+    // Check target date/session not blocked
+    const slotSess = TIME_SLOTS.find(s => s.label === newSlot).session;
+    const bStmt = db.prepare('SELECT id FROM blocked_dates WHERE block_date = ? AND session IN (?, ?)');
+    bStmt.bind([newDate, slotSess, 'all_day']);
+    if (bStmt.step()) { bStmt.free(); return res.status(400).json({ error: '目标日期/时段已被管理员屏蔽，无法修改' }); }
+    bStmt.free();
   }
 
   const ts = nowStr();
@@ -367,6 +468,63 @@ app.get('/api/admin/appointments', (req, res) => {
   }
 
   res.json({ appointments: rows });
+});
+
+// ── Blocked Dates Management ───────────────────────────────────────────────────
+
+// GET /api/admin/blocked-dates
+app.get('/api/admin/blocked-dates', (req, res) => {
+  const stmt = db.prepare('SELECT id, block_date, session, created_at FROM blocked_dates ORDER BY block_date ASC');
+  const rows = [];
+  while (stmt.step()) rows.push(stmt.getAsObject());
+  stmt.free();
+  res.json({ blockedDates: rows });
+});
+
+// POST /api/admin/blocked-dates
+app.post('/api/admin/blocked-dates', (req, res) => {
+  const { date, session } = req.body;
+  if (!date || !/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+    return res.status(400).json({ error: '请提供有效日期' });
+  }
+  if (!['morning', 'afternoon', 'all_day'].includes(session)) {
+    return res.status(400).json({ error: '无效的时段类型' });
+  }
+
+  // Check existing blocks for this date
+  const exStmt = db.prepare('SELECT session FROM blocked_dates WHERE block_date = ?');
+  exStmt.bind([date]);
+  const existingSessions = new Set();
+  while (exStmt.step()) existingSessions.add(exStmt.getAsObject().session);
+  exStmt.free();
+
+  if (existingSessions.has('all_day')) {
+    return res.status(400).json({ error: '该日期已被全天屏蔽' });
+  }
+  if (session === 'all_day' && existingSessions.size > 0) {
+    db.run('DELETE FROM blocked_dates WHERE block_date = ?', [date]);
+  }
+  if (session !== 'all_day' && existingSessions.has(session)) {
+    return res.status(400).json({ error: '该时段已被屏蔽，请勿重复操作' });
+  }
+
+  const ts = nowStr();
+  db.run('INSERT INTO blocked_dates (block_date, session, created_at) VALUES (?, ?, ?)',
+    [date, session, ts]);
+  enqueueWrite(() => persistDB());
+  res.json({ success: true, message: '屏蔽设置成功' });
+});
+
+// DELETE /api/admin/blocked-dates/:id
+app.delete('/api/admin/blocked-dates/:id', (req, res) => {
+  const id = parseInt(req.params.id, 10);
+  const stmt = db.prepare('SELECT * FROM blocked_dates WHERE id = ?');
+  stmt.bind([id]);
+  if (!stmt.step()) { stmt.free(); return res.status(404).json({ error: '屏蔽记录不存在' }); }
+  stmt.free();
+  db.run('DELETE FROM blocked_dates WHERE id = ?', [id]);
+  enqueueWrite(() => persistDB());
+  res.json({ success: true, message: '已取消屏蔽' });
 });
 
 // ── Static files (after all API routes) ────────────────────────────────────────
