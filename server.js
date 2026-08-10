@@ -5,7 +5,6 @@ const fs = require('fs');
 
 const PORT = process.env.PORT || 3000;
 const DB_PATH = path.join(__dirname, 'bookings.db');
-const OLD_JSON = path.join(__dirname, 'bookings.json');
 
 const app = express();
 
@@ -43,25 +42,6 @@ function enqueueWrite(fn) {
   return writeQueue;
 }
 
-/** Migrate old JSON data if present and no .db exists */
-function maybeMigrate() {
-  if (fs.existsSync(DB_PATH)) return;
-  if (!fs.existsSync(OLD_JSON)) return;
-  try {
-    const raw = fs.readFileSync(OLD_JSON, 'utf-8');
-    const data = JSON.parse(raw);
-    const stmt = db.prepare('INSERT OR IGNORE INTO appointments (id, name, phone, appt_date, time_slot, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)');
-    for (const a of (data.appointments || [])) {
-      stmt.run([a.id, a.name, a.phone, a.appt_date, a.time_slot, a.created_at, a.updated_at]);
-    }
-    stmt.free();
-    persistDB();
-    // Rename old file as backup
-    fs.renameSync(OLD_JSON, OLD_JSON + '.backup');
-    console.log('✅ 已从 bookings.json 迁移数据');
-  } catch (e) { console.error('Migration error:', e.message); }
-}
-
 async function initDB() {
   const SQL = await initSqlJs();
   if (fs.existsSync(DB_PATH)) {
@@ -76,9 +56,12 @@ async function initDB() {
     phone       TEXT    NOT NULL,
     appt_date   TEXT    NOT NULL,
     time_slot   TEXT    NOT NULL,
+    status      TEXT    NOT NULL DEFAULT '已完成',
     created_at  TEXT    NOT NULL,
     updated_at  TEXT    NOT NULL
   )`);
+  // Migration: add status column for existing databases
+  try { db.run('ALTER TABLE appointments ADD COLUMN status TEXT NOT NULL DEFAULT \'已完成\''); } catch(e) { /* column exists */ }
   db.run(`CREATE TABLE IF NOT EXISTS blocked_dates (
     id         INTEGER PRIMARY KEY AUTOINCREMENT,
     block_date TEXT    NOT NULL,
@@ -87,7 +70,6 @@ async function initDB() {
     UNIQUE(block_date, session)
   )`);
   persistDB();
-  maybeMigrate();
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -158,7 +140,7 @@ app.get('/api/availability', (req, res) => {
   }
 
   const countMap = {};
-  const stmt = db.prepare('SELECT time_slot, COUNT(*) as cnt FROM appointments WHERE appt_date = ? GROUP BY time_slot');
+  const stmt = db.prepare("SELECT time_slot, COUNT(*) as cnt FROM appointments WHERE appt_date = ? AND status != '未到场' GROUP BY time_slot");
   stmt.bind([date]);
   while (stmt.step()) {
     const row = stmt.getAsObject();
@@ -214,7 +196,7 @@ app.get('/api/availability/month', (req, res) => {
 
   // Query per-slot booking counts
   const slotMap = {};
-  const slotStmt = db.prepare('SELECT appt_date, time_slot, COUNT(*) as cnt FROM appointments WHERE appt_date BETWEEN ? AND ? GROUP BY appt_date, time_slot');
+  const slotStmt = db.prepare("SELECT appt_date, time_slot, COUNT(*) as cnt FROM appointments WHERE appt_date BETWEEN ? AND ? AND status != '未到场' GROUP BY appt_date, time_slot");
   slotStmt.bind([monthStart, monthEnd]);
   while (slotStmt.step()) {
     const row = slotStmt.getAsObject();
@@ -291,8 +273,8 @@ app.post('/api/appointments', (req, res) => {
   const slot = TIME_SLOTS.find((s) => s.label === timeSlot);
   if (!slot) return res.status(400).json({ error: '无效的时间段' });
 
-  // Check capacity
-  const cntRow = db.prepare('SELECT COUNT(*) as cnt FROM appointments WHERE appt_date = ? AND time_slot = ?');
+  // Check capacity (exclude no-shows)
+  const cntRow = db.prepare("SELECT COUNT(*) as cnt FROM appointments WHERE appt_date = ? AND time_slot = ? AND status != '未到场'");
   cntRow.bind([date, timeSlot]);
   cntRow.step();
   const bookedCount = cntRow.getAsObject().cnt;
@@ -397,7 +379,7 @@ app.put('/api/appointments/:id', (req, res) => {
   }
 
   if (newDate !== existing.appt_date || newSlot !== existing.time_slot) {
-    const cStmt = db.prepare('SELECT COUNT(*) as cnt FROM appointments WHERE appt_date = ? AND time_slot = ? AND id != ?');
+    const cStmt = db.prepare("SELECT COUNT(*) as cnt FROM appointments WHERE appt_date = ? AND time_slot = ? AND id != ? AND status != '未到场'");
     cStmt.bind([newDate, newSlot, id]);
     cStmt.step();
     if (cStmt.getAsObject().cnt >= MAX_PER_SLOT) { cStmt.free(); return res.status(400).json({ error: '目标时间段已约满' }); }
@@ -457,17 +439,35 @@ app.get('/api/admin/appointments', (req, res) => {
 
   let rows = [];
   if (date && /^\d{4}-\d{2}-\d{2}$/.test(date)) {
-    const stmt = db.prepare('SELECT id, name, phone, appt_date, time_slot, created_at FROM appointments WHERE appt_date = ? ORDER BY time_slot ASC, created_at ASC');
+    const stmt = db.prepare('SELECT id, name, phone, appt_date, time_slot, status, created_at FROM appointments WHERE appt_date = ? ORDER BY time_slot ASC, created_at ASC');
     stmt.bind([date]);
     while (stmt.step()) rows.push(stmt.getAsObject());
     stmt.free();
   } else {
-    const stmt = db.prepare('SELECT id, name, phone, appt_date, time_slot, created_at FROM appointments ORDER BY appt_date DESC, time_slot ASC');
+    const stmt = db.prepare('SELECT id, name, phone, appt_date, time_slot, status, created_at FROM appointments ORDER BY appt_date DESC, time_slot ASC');
     while (stmt.step()) rows.push(stmt.getAsObject());
     stmt.free();
   }
 
   res.json({ appointments: rows });
+});
+
+// PUT /api/admin/appointments/:id/status
+app.put('/api/admin/appointments/:id/status', (req, res) => {
+  const id = parseInt(req.params.id, 10);
+  const { status } = req.body;
+  if (!['已完成', '未到场'].includes(status)) {
+    return res.status(400).json({ error: '无效的状态值' });
+  }
+
+  const stmt = db.prepare('SELECT * FROM appointments WHERE id = ?');
+  stmt.bind([id]);
+  if (!stmt.step()) { stmt.free(); return res.status(404).json({ error: '预约记录不存在' }); }
+  stmt.free();
+
+  db.run('UPDATE appointments SET status = ?, updated_at = ? WHERE id = ?', [status, nowStr(), id]);
+  enqueueWrite(() => persistDB());
+  res.json({ success: true, message: `已标记为"${status}"`, status });
 });
 
 // ── Blocked Dates Management ───────────────────────────────────────────────────

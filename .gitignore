@@ -2,3 +2,7 @@ node_modules/
 *.db
 bookings.json
 bookings.json.backup
+*.csv
+batch-book.js
+phone-mapping.json
+.env

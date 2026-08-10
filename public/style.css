@@ -479,6 +479,32 @@ body {
   font-size: 13px;
 }
 
+/* ── Status Buttons ───────────────────────────────────────────────────── */
+.btn-status {
+  font-size: 12px;
+  padding: 3px 10px;
+  border-radius: 10px;
+  border: none;
+  cursor: pointer;
+  font-weight: 600;
+  transition: all .15s;
+}
+.btn-status.done {
+  background: var(--green-bg);
+  color: var(--green);
+}
+.btn-status.noshow {
+  background: var(--red-bg);
+  color: var(--red);
+}
+.btn-status:active { transform: scale(.95); }
+.btn-status:disabled { opacity: .5; cursor: not-allowed; }
+
+.row-noshow td {
+  color: var(--gray-400);
+  text-decoration: line-through;
+}
+
 /* ── Toast ───────────────────────────────────────────────────────────────── */
 .toast {
   position: fixed; top: 20px; left: 50%; transform: translateX(-50%);
@@ -514,6 +540,13 @@ body {
 .block-form-row .form-group {
   flex: 1;
 }
+.block-form-row input,
+.block-form-row select {
+  font-family: inherit;
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--gray-800);
+}
 
 .blocked-list {
   display: flex;
@@ -539,17 +572,18 @@ body {
 }
 
 .blocked-date {
+  font-size: 13px;
   font-weight: 600;
   color: var(--gray-700);
 }
 
 .blocked-session-tag {
-  font-size: 12px;
+  font-size: 13px;
+  font-weight: 600;
   color: var(--orange);
   background: #fff;
-  padding: 2px 8px;
+  padding: 2px 10px;
   border-radius: 10px;
-  font-weight: 600;
 }
 
 /* Blocked slot indicator */

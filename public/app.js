@@ -649,15 +649,13 @@ document.getElementById('btn-admin-export').addEventListener('click', async () =
     const data = await api('GET', '/api/admin/appointments');
     if (!data.appointments.length) { toast('暂无预约记录可导出', 'error'); return; }
 
-    // Build CSV with BOM for Excel Chinese support
     const BOM = '﻿';
-    const header = '日期,时间段,姓名,手机号,创建时间';
+    const header = '日期,时间段,姓名,手机号,完成状态,创建时间';
     const rows = data.appointments.map(a =>
-      `${a.appt_date},${a.time_slot},${a.name},${a.phone},${a.created_at}`
+      `${a.appt_date},${a.time_slot},${a.name},${a.phone},${a.status || '已完成'},${a.created_at}`
     );
     const csv = BOM + header + '\n' + rows.join('\n');
 
-    // Download
     const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
@@ -747,10 +745,13 @@ async function loadAdminData(date) {
           html += `<div class="slot-group-header">🕐 <strong>${slot}</strong> · ${list.length}人</div>`;
           if (list.length > 0) {
             html += `<table class="admin-table slot-table">
-              <thead><tr><th>#</th><th>姓名</th><th>手机号</th></tr></thead>
+              <thead><tr><th>#</th><th>姓名</th><th>手机号</th><th>完成状态</th></tr></thead>
               <tbody>`;
             html += list.map((a, i) => `
-              <tr><td>${i + 1}</td><td>${a.name}</td><td>${a.phone}</td></tr>`).join('');
+              <tr class="${a.status === '未到场' ? 'row-noshow' : ''}">
+                <td>${i + 1}</td><td>${a.name}</td><td>${a.phone}</td>
+                <td><button class="btn-status ${a.status === '未到场' ? 'noshow' : 'done'}" data-id="${a.id}" data-status="${a.status || '已完成'}">${a.status || '已完成'}</button></td>
+              </tr>`).join('');
             html += `</tbody></table>`;
           } else {
             html += `<div class="slot-empty">暂无预约</div>`;
@@ -777,10 +778,13 @@ async function loadAdminData(date) {
         html += `<div class="slot-group-header">🕐 <strong>${slot}</strong> · ${list.length}人</div>`;
         if (list.length > 0) {
           html += `<table class="admin-table slot-table">
-            <thead><tr><th>#</th><th>姓名</th><th>手机号</th></tr></thead>
+            <thead><tr><th>#</th><th>姓名</th><th>手机号</th><th>完成状态</th></tr></thead>
             <tbody>`;
           html += list.map((a, i) => `
-            <tr><td>${i + 1}</td><td>${a.name}</td><td>${a.phone}</td></tr>`).join('');
+            <tr class="${a.status === '未到场' ? 'row-noshow' : ''}">
+              <td>${i + 1}</td><td>${a.name}</td><td>${a.phone}</td>
+              <td><button class="btn-status ${a.status === '未到场' ? 'noshow' : 'done'}" data-id="${a.id}" data-status="${a.status || '已完成'}">${a.status || '已完成'}</button></td>
+            </tr>`).join('');
           html += `</tbody></table>`;
         } else {
           html += `<div class="slot-empty">暂无预约</div>`;
@@ -795,6 +799,45 @@ async function loadAdminData(date) {
     wrap.innerHTML = '';
   }
 }
+
+// ── Status Toggle ──────────────────────────────────────────────────────────
+
+// Event delegation for status buttons (dynamically rendered)
+document.getElementById('admin-table-wrap').addEventListener('click', async (e) => {
+  if (!e.target.classList.contains('btn-status')) return;
+  const btn = e.target;
+  const id = btn.dataset.id;
+  const currentStatus = btn.dataset.status;
+  const newStatus = currentStatus === '未到场' ? '已完成' : '未到场';
+
+  btn.disabled = true;
+  btn.textContent = '...';
+
+  try {
+    const data = await api('PUT', `/api/admin/appointments/${id}/status`, { status: newStatus });
+    btn.dataset.status = newStatus;
+    btn.textContent = newStatus;
+    btn.className = `btn-status ${newStatus === '未到场' ? 'noshow' : 'done'}`;
+
+    // Update row styling
+    const row = btn.closest('tr');
+    if (newStatus === '未到场') {
+      row.classList.add('row-noshow');
+    } else {
+      row.classList.remove('row-noshow');
+    }
+
+    toast(data.success ? `✅ ${data.message}` : data.message, data.success ? 'success' : 'error');
+
+    // Refresh calendar if on booking tab (slot counts may change)
+    if (state.currentTab === 'booking') await renderCalendar();
+  } catch (err) {
+    toast(err.message, 'error');
+    btn.textContent = currentStatus;
+  } finally {
+    btn.disabled = false;
+  }
+});
 
 // ═══════════════════════════════════════════════════════════════════════════
 // BLOCKED DATES MANAGEMENT (Admin)
