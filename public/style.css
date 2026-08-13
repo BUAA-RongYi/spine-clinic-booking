@@ -195,6 +195,17 @@ body {
 .cal-dot.full      { background: var(--gray-400); }
 .cal-dot.blocked   { background: var(--orange); }
 
+.cal-badge {
+  font-size: 10px;
+  padding: 1px 5px;
+  border-radius: 8px;
+  font-weight: 600;
+  line-height: 1.4;
+}
+.cal-badge.avail   { background: var(--green-bg); color: var(--green); }
+.cal-badge.full    { background: var(--gray-100); color: var(--gray-400); }
+.cal-badge.blocked { background: var(--orange-bg); color: var(--orange); }
+
 .calendar-legend {
   display: flex; gap: 16px; justify-content: center;
   margin-top: 12px; font-size: 12px; color: var(--gray-500);
@@ -224,16 +235,18 @@ body {
   padding: 14px 16px;
   border-radius: var(--radius-sm);
   border: 2px solid var(--gray-200);
+  border-left: 4px solid var(--gray-200);
   background: var(--gray-50);
   cursor: pointer;
   transition: all .15s;
   font-size: 15px;
 }
 .slot-item:active { transform: scale(.98); }
-.slot-item.available { border-color: var(--blue-light); background: #fff; }
+.slot-item.available { border-color: var(--blue-light); border-left-color: var(--green); background: #fff; }
 .slot-item.available:hover, .slot-item.available:active { border-color: var(--blue); }
 .slot-item.full {
-  border-color: var(--gray-200); background: var(--gray-100);
+  border-color: var(--gray-200); border-left-color: var(--gray-400);
+  background: var(--gray-100);
   color: var(--gray-400); cursor: not-allowed;
 }
 .slot-time { font-weight: 600; }
@@ -366,6 +379,19 @@ body {
 .date-picker-row input {
   flex: 1;
 }
+.cal-nav-btn-sm {
+  width: 36px; height: 48px;
+  border: 2px solid var(--gray-200);
+  border-radius: var(--radius-sm);
+  background: #fff;
+  font-size: 14px;
+  cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+  color: var(--gray-600);
+  flex-shrink: 0;
+  transition: all .15s;
+}
+.cal-nav-btn-sm:active { background: var(--gray-100); }
 .btn-cal {
   width: 48px; height: 48px;
   border: 2px solid var(--blue);
@@ -479,6 +505,32 @@ body {
   font-size: 13px;
 }
 
+/* ── Collapsible Admin Sections ─────────────────────────────────────── */
+.admin-collapse-header {
+  font-size: 16px;
+  font-weight: 700;
+  margin-bottom: 8px;
+  color: var(--gray-800);
+  cursor: pointer;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  user-select: none;
+}
+.collapse-arrow {
+  font-size: 12px;
+  transition: transform .2s;
+}
+.admin-collapse-header.open .collapse-arrow {
+  transform: rotate(180deg);
+}
+.admin-collapse-body {
+  display: block;
+}
+.admin-collapse-header:not(.open) + .admin-collapse-body {
+  display: none;
+}
+
 /* ── Status Buttons ───────────────────────────────────────────────────── */
 .btn-status {
   font-size: 12px;
@@ -503,6 +555,107 @@ body {
 .row-noshow td {
   color: var(--gray-400);
   text-decoration: line-through;
+}
+
+/* ── Patient Stats ─────────────────────────────────────────────────────── */
+.stat-date-row {
+  display: flex;
+  gap: 8px;
+}
+.stat-summary-row {
+  display: flex;
+  gap: 10px;
+}
+.stat-card {
+  flex: 1;
+  background: #fff;
+  border-radius: var(--radius-sm);
+  padding: 14px 10px;
+  text-align: center;
+  box-shadow: var(--shadow);
+  border: 2px solid var(--gray-200);
+}
+.stat-card.attended {
+  border-color: var(--green);
+  background: var(--green-bg);
+}
+.stat-card.noshow {
+  border-color: var(--red);
+  background: var(--red-bg);
+}
+.stat-num {
+  font-size: 28px;
+  font-weight: 800;
+  color: var(--gray-800);
+  line-height: 1.2;
+}
+.stat-card.attended .stat-num { color: var(--green); }
+.stat-card.noshow .stat-num { color: var(--red); }
+.stat-label {
+  font-size: 12px;
+  color: var(--gray-500);
+  margin-top: 2px;
+}
+.stat-status {
+  font-size: 12px;
+  font-weight: 600;
+  padding: 2px 10px;
+  border-radius: 10px;
+}
+.stat-status.done {
+  background: var(--green-bg);
+  color: var(--green);
+}
+.stat-status.noshow {
+  background: var(--red-bg);
+  color: var(--red);
+}
+.stat-empty {
+  text-align: center;
+  padding: 16px;
+  color: var(--gray-400);
+  font-size: 14px;
+}
+
+/* ── Success Card ─────────────────────────────────────────────────────── */
+.success-box {
+  background: #fff;
+  padding: 24px 20px;
+  text-align: center;
+}
+.success-icon {
+  font-size: 48px;
+}
+.success-details {
+  background: var(--gray-50);
+  border-radius: var(--radius-sm);
+  padding: 12px 16px;
+  margin: 12px 0;
+  text-align: left;
+}
+.success-row {
+  display: flex;
+  justify-content: space-between;
+  padding: 6px 0;
+  font-size: 14px;
+  color: var(--gray-500);
+  border-bottom: 1px solid var(--gray-100);
+}
+.success-row:last-child {
+  border-bottom: none;
+}
+.success-row strong {
+  color: var(--gray-800);
+  font-weight: 600;
+}
+.success-hint {
+  font-size: 12px;
+  color: var(--orange);
+  margin-top: 4px;
+}
+#success-close {
+  width: 100%;
+  margin-top: 12px;
 }
 
 /* ── Toast ───────────────────────────────────────────────────────────────── */
@@ -541,7 +694,8 @@ body {
   flex: 1;
 }
 .block-form-row input,
-.block-form-row select {
+.block-form-row select,
+.stat-date-row input {
   font-family: inherit;
   font-size: 14px;
   font-weight: 500;
@@ -589,6 +743,7 @@ body {
 /* Blocked slot indicator */
 .slot-item.blocked {
   border-color: var(--orange);
+  border-left-color: var(--orange);
   background: var(--orange-bg);
   color: var(--gray-500);
   cursor: not-allowed;

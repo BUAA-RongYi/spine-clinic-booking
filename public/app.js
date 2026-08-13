@@ -37,6 +37,11 @@ function todayStr() { return ymd(new Date()); }
 async function api(method, path, body) {
   const opts = { method, headers: { 'Content-Type': 'application/json' } };
   if (body) opts.body = JSON.stringify(body);
+  // Attach admin token for admin routes
+  if (path.startsWith('/api/admin/') && path !== '/api/admin/verify') {
+    const token = sessionStorage.getItem('admin_token');
+    if (token) opts.headers['Authorization'] = `Bearer ${token}`;
+  }
   let res;
   try {
     res = await fetch(path, opts);
@@ -53,6 +58,16 @@ async function api(method, path, body) {
   }
   if (!res.ok) throw new Error(data.error || `请求失败 (${res.status})`);
   return data;
+}
+
+/** Escape HTML to prevent XSS when injecting user data */
+function escapeHtml(str) {
+  return String(str)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
 }
 
 /** Show toast message */
@@ -166,10 +181,11 @@ async function renderCalendar() {
 
     if (info && info.inRange) {
       if (info.blocked && !info.available) {
-        cell.innerHTML += '<span class="cal-dot blocked"></span>';
+        cell.innerHTML += '<span class="cal-badge blocked">屏蔽</span>';
+      } else if (info.available) {
+        cell.innerHTML += `<span class="cal-badge avail">剩${info.totalRemaining}</span>`;
       } else {
-        const dotClass = info.available ? 'avail' : 'full';
-        cell.innerHTML += `<span class="cal-dot ${dotClass}"></span>`;
+        cell.innerHTML += '<span class="cal-badge full">满</span>';
       }
     }
 
@@ -255,6 +271,16 @@ document.getElementById('form-close').addEventListener('click', () => {
   state.selectedSlot = null;
 });
 
+// Success card close
+document.getElementById('success-close').addEventListener('click', () => {
+  document.getElementById('success-overlay').style.display = 'none';
+});
+document.getElementById('success-overlay').addEventListener('click', (e) => {
+  if (e.target === e.currentTarget) {
+    document.getElementById('success-overlay').style.display = 'none';
+  }
+});
+
 document.getElementById('form-overlay').addEventListener('click', (e) => {
   if (e.target === e.currentTarget) {
     document.getElementById('form-overlay').style.display = 'none';
@@ -282,9 +308,16 @@ document.getElementById('btn-submit').addEventListener('click', async () => {
     });
 
     saveUser(name, phone);
-    toast('✅ 预约成功！', 'success');
 
+    // Show success confirm card
     document.getElementById('form-overlay').style.display = 'none';
+    document.getElementById('success-date').textContent = state.selectedDate;
+    document.getElementById('success-slot').textContent = state.selectedSlot;
+    document.getElementById('success-name').textContent = name;
+    document.getElementById('success-phone').textContent = phone;
+    document.getElementById('success-id').textContent = data.appointment ? data.appointment.id : '-';
+    document.getElementById('success-overlay').style.display = 'flex';
+
     state.selectedSlot = null;
     await renderSlots(state.selectedDate);
     await renderCalendar();
@@ -379,7 +412,7 @@ function renderMyAppointments(appts) {
     const actionsHTML = a.isPast ? '' : `
       <div class="appt-actions">
         ${a.canModify ? `<button class="btn-sm edit" data-id="${a.id}" data-action="modify">✏️ 修改</button>` : ''}
-        ${a.canModify ? `<button class="btn-sm cancel" data-id="${a.id}" data-action="cancel">🗑 取消</button>` : ''}
+        ${a.canModify ? `<button class="btn-sm cancel" data-id="${a.id}" data-phone="${escapeHtml(a.phone)}" data-action="cancel">🗑 取消</button>` : ''}
       </div>
       ${!a.canModify && !a.isPast ? '<div class="appt-deadline">⏰ 距预约不足2小时，无法修改/取消</div>' : ''}
     `;
@@ -390,8 +423,8 @@ function renderMyAppointments(appts) {
           <span class="appt-slot">${a.time_slot}</span>
         </div>
         <div class="appt-row">
-          <span class="appt-name">👤 ${a.name}</span>
-          <span class="appt-name">📱 ${a.phone}</span>
+          <span class="appt-name">👤 ${escapeHtml(a.name)}</span>
+          <span class="appt-name">📱 ${escapeHtml(a.phone)}</span>
         </div>
         ${actionsHTML}
       </div>
@@ -403,7 +436,7 @@ function renderMyAppointments(appts) {
     btn.addEventListener('click', () => openModifyModal(btn.dataset.id, appts));
   });
   list.querySelectorAll('[data-action="cancel"]').forEach((btn) => {
-    btn.addEventListener('click', () => cancelAppointment(btn.dataset.id));
+    btn.addEventListener('click', () => cancelAppointment(btn.dataset.id, btn.dataset.phone));
   });
 }
 
@@ -471,11 +504,11 @@ document.getElementById('btn-modify-confirm').addEventListener('click', async ()
 
 // ── Cancel Appointment ─────────────────────────────────────────────────────
 
-async function cancelAppointment(id) {
+async function cancelAppointment(id, phone) {
   if (!confirm('确定要取消此预约吗？取消后不可恢复。')) return;
 
   try {
-    await api('DELETE', `/api/appointments/${id}`);
+    await api('DELETE', `/api/appointments/${id}`, { phone });
     toast('✅ 预约已取消', 'success');
     // Refresh list
     document.getElementById('btn-lookup').click();
@@ -689,6 +722,20 @@ document.getElementById('btn-admin-query').addEventListener('click', async () =>
   await loadAdminData(date);
 });
 
+// Admin date quick navigation
+function shiftAdminDate(days) {
+  const input = document.getElementById('admin-date');
+  const cur = new Date(input.value + 'T00:00:00');
+  cur.setDate(cur.getDate() + days);
+  const y = cur.getFullYear();
+  const m = String(cur.getMonth() + 1).padStart(2, '0');
+  const d = String(cur.getDate()).padStart(2, '0');
+  input.value = `${y}-${m}-${d}`;
+  loadAdminData(input.value);
+}
+document.getElementById('btn-admin-prev').addEventListener('click', () => shiftAdminDate(-1));
+document.getElementById('btn-admin-next').addEventListener('click', () => shiftAdminDate(1));
+
 document.getElementById('btn-admin-all').addEventListener('click', async () => {
   await loadAdminData(null);
 });
@@ -749,7 +796,7 @@ async function loadAdminData(date) {
               <tbody>`;
             html += list.map((a, i) => `
               <tr class="${a.status === '未到场' ? 'row-noshow' : ''}">
-                <td>${i + 1}</td><td>${a.name}</td><td>${a.phone}</td>
+                <td>${i + 1}</td><td>${escapeHtml(a.name)}</td><td>${escapeHtml(a.phone)}</td>
                 <td><button class="btn-status ${a.status === '未到场' ? 'noshow' : 'done'}" data-id="${a.id}" data-status="${a.status || '已完成'}">${a.status || '已完成'}</button></td>
               </tr>`).join('');
             html += `</tbody></table>`;
@@ -782,7 +829,7 @@ async function loadAdminData(date) {
             <tbody>`;
           html += list.map((a, i) => `
             <tr class="${a.status === '未到场' ? 'row-noshow' : ''}">
-              <td>${i + 1}</td><td>${a.name}</td><td>${a.phone}</td>
+              <td>${i + 1}</td><td>${escapeHtml(a.name)}</td><td>${escapeHtml(a.phone)}</td>
               <td><button class="btn-status ${a.status === '未到场' ? 'noshow' : 'done'}" data-id="${a.id}" data-status="${a.status || '已完成'}">${a.status || '已完成'}</button></td>
             </tr>`).join('');
           html += `</tbody></table>`;
@@ -836,6 +883,65 @@ document.getElementById('admin-table-wrap').addEventListener('click', async (e) 
     btn.textContent = currentStatus;
   } finally {
     btn.disabled = false;
+  }
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// PATIENT STATS (Admin)
+// ═══════════════════════════════════════════════════════════════════════════
+
+// Set default date range to current month
+(function() {
+  const now = new Date();
+  const y = now.getFullYear();
+  const m = String(now.getMonth() + 1).padStart(2, '0');
+  const days = new Date(y, now.getMonth() + 1, 0).getDate();
+  const startEl = document.getElementById('stat-start');
+  const endEl = document.getElementById('stat-end');
+  if (startEl) startEl.value = `${y}-${m}-01`;
+  if (endEl) endEl.value = `${y}-${m}-${String(days).padStart(2, '0')}`;
+})();
+
+document.getElementById('btn-stat-query').addEventListener('click', async () => {
+  const name = document.getElementById('stat-name').value.trim();
+  const start = document.getElementById('stat-start').value;
+  const end = document.getElementById('stat-end').value;
+  const result = document.getElementById('stat-result');
+
+  if (!name) return toast('请输入患者姓名', 'error');
+  if (!start || !end) return toast('请选择日期范围', 'error');
+
+  result.innerHTML = '<p style="text-align:center;color:var(--gray-400);padding:12px;">查询中...</p>';
+
+  try {
+    const data = await api('GET', `/api/admin/patient-stats?name=${encodeURIComponent(name)}&start=${start}&end=${end}`);
+
+    if (!data.appointments.length) {
+      result.innerHTML = `<div class="stat-empty">未找到"${name}"在 ${start} ~ ${end} 期间的预约记录</div>`;
+      return;
+    }
+
+    let html = `<div class="stat-summary-row">
+      <div class="stat-card"><div class="stat-num">${data.total}</div><div class="stat-label">总预约</div></div>
+      <div class="stat-card attended"><div class="stat-num">${data.attended}</div><div class="stat-label">已完成</div></div>
+      <div class="stat-card noshow"><div class="stat-num">${data.noshow}</div><div class="stat-label">未到场</div></div>
+    </div>`;
+
+    html += `<table class="admin-table" style="margin-top:12px;">
+      <thead><tr><th>日期</th><th>时间段</th><th>状态</th></tr></thead>
+      <tbody>`;
+    html += data.appointments.map(a => `
+      <tr class="${a.status === '未到场' ? 'row-noshow' : ''}">
+        <td>${a.appt_date}</td>
+        <td>${a.time_slot}</td>
+        <td><span class="stat-status ${a.status === '未到场' ? 'noshow' : 'done'}">${a.status || '已完成'}</span></td>
+      </tr>`).join('');
+    html += `</tbody></table>`;
+
+    result.innerHTML = html;
+  } catch (e) {
+    toast(e.message, 'error');
+    result.innerHTML = '';
   }
 });
 
@@ -917,6 +1023,12 @@ function init() {
     blockDateInput.setAttribute('min', todayStr());
     blockDateInput.value = todayStr();
   }
+  // Admin collapsible sections
+  document.querySelectorAll('.admin-collapse-header').forEach(header => {
+    header.addEventListener('click', () => {
+      header.classList.toggle('open');
+    });
+  });
 }
 
 init();
