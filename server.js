@@ -26,8 +26,37 @@ const TIME_SLOTS = [
 ];
 
 const MAX_PER_SLOT = 8;
-const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'admin888';
+// M3: password must come from environment — no hardcoded default
+const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD;
 let adminToken = null; // stored server-side, validated per request
+
+// ── Login Rate Limiter (M3) ───────────────────────────────────────────────────
+const loginAttempts = new Map(); // ip -> { count, lockedUntil }
+
+function loginRateLimit(req, res, next) {
+  const ip = req.ip || req.socket.remoteAddress || 'unknown';
+  const rec = loginAttempts.get(ip);
+  if (rec && rec.lockedUntil > Date.now()) {
+    const mins = Math.ceil((rec.lockedUntil - Date.now()) / 60000);
+    return res.status(429).json({ error: `尝试次数过多，请${mins}分钟后再试` });
+  }
+  next();
+}
+
+function recordLoginFailure(ip) {
+  const rec = loginAttempts.get(ip) || { count: 0, lockedUntil: 0 };
+  rec.count++;
+  if (rec.count >= 5) {
+    rec.lockedUntil = Date.now() + 5 * 60 * 1000; // lock 5 minutes
+    rec.count = 0;
+    console.log(`[安全] IP ${ip} 连续登录失败5次，锁定5分钟`);
+  }
+  loginAttempts.set(ip, rec);
+}
+
+function recordLoginSuccess(ip) {
+  loginAttempts.delete(ip);
+}
 
 // ── Admin Auth Middleware ─────────────────────────────────────────────────────
 function requireAdmin(req, res, next) {
@@ -130,10 +159,15 @@ function nowStr() {
 // ── API Routes ────────────────────────────────────────────────────────────────
 
 // POST /api/admin/verify
-app.post('/api/admin/verify', (req, res) => {
+app.post('/api/admin/verify', loginRateLimit, (req, res) => {
+  const ip = req.ip || req.socket.remoteAddress || 'unknown';
   const { password } = req.body;
   if (!password) return res.status(400).json({ error: '请输入密码' });
-  if (password !== ADMIN_PASSWORD) return res.status(403).json({ error: '密码错误' });
+  if (password !== ADMIN_PASSWORD) {
+    recordLoginFailure(ip);
+    return res.status(403).json({ error: '密码错误' });
+  }
+  recordLoginSuccess(ip);
   adminToken = Buffer.from(`admin_${Date.now()}_${Math.random()}`).toString('base64');
   res.json({ success: true, token: adminToken });
 });
@@ -268,7 +302,7 @@ app.get('/api/availability/month', (req, res) => {
 });
 
 // POST /api/appointments
-app.post('/api/appointments', (req, res) => {
+app.post('/api/appointments', async (req, res) => {
   const { name, phone, date, timeSlot } = req.body;
   if (!name || !phone || !date || !timeSlot) {
     return res.status(400).json({ error: '请填写完整信息（姓名、手机号、日期、时间段）' });
@@ -342,18 +376,21 @@ app.post('/api/appointments', (req, res) => {
   const id = idStmt.getAsObject().id;
   idStmt.free();
 
-  enqueueWrite(() => persistDB());
+  // M5: wait for disk persist before responding
+  await enqueueWrite(() => persistDB());
 
   res.json({ success: true, message: '预约成功！', appointment: { id, name: cleanName, phone, date, timeSlot } });
 });
 
-// GET /api/appointments?phone=xxx
+// GET /api/appointments?phone=xxx&name=xxx
 app.get('/api/appointments', (req, res) => {
-  const { phone } = req.query;
+  const { phone, name } = req.query;
   if (!phone) return res.status(400).json({ error: '请提供手机号' });
+  // M2: require name for double verification (protect patient privacy)
+  if (!name || !String(name).trim()) return res.status(400).json({ error: '请提供姓名以验证身份' });
 
-  const stmt = db.prepare('SELECT id, name, phone, appt_date, time_slot, created_at FROM appointments WHERE phone = ? ORDER BY appt_date ASC, time_slot ASC');
-  stmt.bind([phone]);
+  const stmt = db.prepare('SELECT id, name, phone, appt_date, time_slot, created_at FROM appointments WHERE phone = ? AND name = ? ORDER BY appt_date ASC, time_slot ASC');
+  stmt.bind([phone, String(name).trim()]);
   const rows = [];
   while (stmt.step()) rows.push(stmt.getAsObject());
   stmt.free();
@@ -369,7 +406,7 @@ app.get('/api/appointments', (req, res) => {
 });
 
 // PUT /api/appointments/:id
-app.put('/api/appointments/:id', (req, res) => {
+app.put('/api/appointments/:id', async (req, res) => {
   const id = parseInt(req.params.id, 10);
   const { date, timeSlot, name, phone } = req.body;
 
@@ -450,13 +487,14 @@ app.put('/api/appointments/:id', (req, res) => {
   db.run('UPDATE appointments SET appt_date = ?, time_slot = ?, name = ?, updated_at = ? WHERE id = ?',
     [newDate, newSlot, trimmedName, ts, id]);
 
-  enqueueWrite(() => persistDB());
+  // M5: wait for disk persist before responding
+  await enqueueWrite(() => persistDB());
 
   res.json({ success: true, message: '预约信息已更新' });
 });
 
 // DELETE /api/appointments/:id
-app.delete('/api/appointments/:id', (req, res) => {
+app.delete('/api/appointments/:id', async (req, res) => {
   const id = parseInt(req.params.id, 10);
   const { phone } = req.body;
 
@@ -476,9 +514,25 @@ app.delete('/api/appointments/:id', (req, res) => {
   }
 
   db.run('DELETE FROM appointments WHERE id = ?', [id]);
-  enqueueWrite(() => persistDB());
+  // M5: wait for disk persist before responding
+  await enqueueWrite(() => persistDB());
 
   res.json({ success: true, message: '预约已取消' });
+});
+
+// DELETE /api/admin/appointments/:id — admin can delete any record (no 2h limit)
+app.delete('/api/admin/appointments/:id', requireAdmin, async (req, res) => {
+  const id = parseInt(req.params.id, 10);
+
+  const stmt = db.prepare('SELECT * FROM appointments WHERE id = ?');
+  stmt.bind([id]);
+  if (!stmt.step()) { stmt.free(); return res.status(404).json({ error: '预约记录不存在' }); }
+  stmt.free();
+
+  db.run('DELETE FROM appointments WHERE id = ?', [id]);
+  await enqueueWrite(() => persistDB());
+
+  res.json({ success: true, message: '预约记录已删除' });
 });
 
 // GET /api/admin/appointments?date=YYYY-MM-DD
@@ -501,7 +555,7 @@ app.get('/api/admin/appointments', requireAdmin, (req, res) => {
 });
 
 // PUT /api/admin/appointments/:id/status
-app.put('/api/admin/appointments/:id/status', requireAdmin, (req, res) => {
+app.put('/api/admin/appointments/:id/status', requireAdmin, async (req, res) => {
   const id = parseInt(req.params.id, 10);
   const { status } = req.body;
   if (!['已完成', '未到场'].includes(status)) {
@@ -514,7 +568,8 @@ app.put('/api/admin/appointments/:id/status', requireAdmin, (req, res) => {
   stmt.free();
 
   db.run('UPDATE appointments SET status = ?, updated_at = ? WHERE id = ?', [status, nowStr(), id]);
-  enqueueWrite(() => persistDB());
+  // M5: wait for disk persist before responding
+  await enqueueWrite(() => persistDB());
   res.json({ success: true, message: `已标记为"${status}"`, status });
 });
 
@@ -558,7 +613,7 @@ app.get('/api/admin/blocked-dates', requireAdmin, (req, res) => {
 });
 
 // POST /api/admin/blocked-dates
-app.post('/api/admin/blocked-dates', requireAdmin, (req, res) => {
+app.post('/api/admin/blocked-dates', requireAdmin, async (req, res) => {
   const { date, session } = req.body;
   if (!date || !/^\d{4}-\d{2}-\d{2}$/.test(date)) {
     return res.status(400).json({ error: '请提供有效日期' });
@@ -587,19 +642,19 @@ app.post('/api/admin/blocked-dates', requireAdmin, (req, res) => {
   const ts = nowStr();
   db.run('INSERT INTO blocked_dates (block_date, session, created_at) VALUES (?, ?, ?)',
     [date, session, ts]);
-  enqueueWrite(() => persistDB());
+  await enqueueWrite(() => persistDB());
   res.json({ success: true, message: '屏蔽设置成功' });
 });
 
 // DELETE /api/admin/blocked-dates/:id
-app.delete('/api/admin/blocked-dates/:id', requireAdmin, (req, res) => {
+app.delete('/api/admin/blocked-dates/:id', requireAdmin, async (req, res) => {
   const id = parseInt(req.params.id, 10);
   const stmt = db.prepare('SELECT * FROM blocked_dates WHERE id = ?');
   stmt.bind([id]);
   if (!stmt.step()) { stmt.free(); return res.status(404).json({ error: '屏蔽记录不存在' }); }
   stmt.free();
   db.run('DELETE FROM blocked_dates WHERE id = ?', [id]);
-  enqueueWrite(() => persistDB());
+  await enqueueWrite(() => persistDB());
   res.json({ success: true, message: '已取消屏蔽' });
 });
 
@@ -617,6 +672,12 @@ app.get('*', (req, res) => {
 });
 
 // ── Start ─────────────────────────────────────────────────────────────────────
+if (!ADMIN_PASSWORD) {
+  console.error('❌ 未设置 ADMIN_PASSWORD 环境变量，拒绝启动。');
+  console.error('   启动方式: ADMIN_PASSWORD=你的密码 pm2 restart spine-clinic --update-env');
+  process.exit(1);
+}
+
 initDB().then(() => {
   app.listen(PORT, () => {
     console.log(`✅ 脊柱侧弯门诊预约系统已启动`);

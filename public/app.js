@@ -98,6 +98,7 @@ function prefillUser() {
   const u = getSavedUser();
   document.getElementById('input-name').value = u.name;
   document.getElementById('input-phone').value = u.phone;
+  document.getElementById('lookup-name').value = u.name;
   document.getElementById('lookup-phone').value = u.phone;
 }
 
@@ -365,16 +366,17 @@ document.getElementById('cal-next').addEventListener('click', () => {
 
 /** Auto-load appointments when switching to My Appointments tab */
 async function autoLoadMyAppointments() {
-  const phone = getSavedUser().phone;
+  const u = getSavedUser();
   const list = document.getElementById('myappt-list');
-  if (!phone) {
-    list.innerHTML = '<div class="appt-item" style="text-align:center;color:var(--gray-400);">请先输入手机号，然后点击"查询预约"</div>';
+  if (!u.phone || !u.name) {
+    list.innerHTML = '<div class="appt-item" style="text-align:center;color:var(--gray-400);">请先输入姓名和手机号，然后点击"查询预约"</div>';
     return;
   }
-  document.getElementById('lookup-phone').value = phone;
+  document.getElementById('lookup-name').value = u.name;
+  document.getElementById('lookup-phone').value = u.phone;
   list.innerHTML = '<p style="text-align:center;color:var(--gray-400);padding:20px;">查询中...</p>';
   try {
-    const data = await api('GET', `/api/appointments?phone=${phone}`);
+    const data = await api('GET', `/api/appointments?phone=${encodeURIComponent(u.phone)}&name=${encodeURIComponent(u.name)}`);
     renderMyAppointments(data.appointments);
   } catch (e) {
     toast(e.message, 'error');
@@ -383,16 +385,18 @@ async function autoLoadMyAppointments() {
 }
 
 document.getElementById('btn-lookup').addEventListener('click', async () => {
+  const name = document.getElementById('lookup-name').value.trim();
   const phone = document.getElementById('lookup-phone').value.trim();
+  if (!name || name.length < 2) return toast('请输入姓名', 'error');
   if (!phone || !/^1\d{10}$/.test(phone)) return toast('请输入有效的11位手机号', 'error');
 
-  saveUser(getSavedUser().name, phone);
+  saveUser(name, phone);
 
   const list = document.getElementById('myappt-list');
   list.innerHTML = '<p style="text-align:center;color:var(--gray-400);padding:20px;">查询中...</p>';
 
   try {
-    const data = await api('GET', `/api/appointments?phone=${phone}`);
+    const data = await api('GET', `/api/appointments?phone=${encodeURIComponent(phone)}&name=${encodeURIComponent(name)}`);
     renderMyAppointments(data.appointments);
   } catch (e) {
     toast(e.message, 'error');
@@ -792,12 +796,13 @@ async function loadAdminData(date) {
           html += `<div class="slot-group-header">🕐 <strong>${slot}</strong> · ${list.length}人</div>`;
           if (list.length > 0) {
             html += `<table class="admin-table slot-table">
-              <thead><tr><th>#</th><th>姓名</th><th>手机号</th><th>完成状态</th></tr></thead>
+              <thead><tr><th>#</th><th>姓名</th><th>手机号</th><th>完成状态</th><th>操作</th></tr></thead>
               <tbody>`;
             html += list.map((a, i) => `
               <tr class="${a.status === '未到场' ? 'row-noshow' : ''}">
                 <td>${i + 1}</td><td>${escapeHtml(a.name)}</td><td>${escapeHtml(a.phone)}</td>
                 <td><button class="btn-status ${a.status === '未到场' ? 'noshow' : 'done'}" data-id="${a.id}" data-status="${a.status || '已完成'}">${a.status || '已完成'}</button></td>
+                <td><button class="btn-admin-del" data-id="${a.id}" data-name="${escapeHtml(a.name)}" data-date="${a.appt_date}" data-slot="${a.time_slot}">🗑</button></td>
               </tr>`).join('');
             html += `</tbody></table>`;
           } else {
@@ -825,12 +830,13 @@ async function loadAdminData(date) {
         html += `<div class="slot-group-header">🕐 <strong>${slot}</strong> · ${list.length}人</div>`;
         if (list.length > 0) {
           html += `<table class="admin-table slot-table">
-            <thead><tr><th>#</th><th>姓名</th><th>手机号</th><th>完成状态</th></tr></thead>
+            <thead><tr><th>#</th><th>姓名</th><th>手机号</th><th>完成状态</th><th>操作</th></tr></thead>
             <tbody>`;
           html += list.map((a, i) => `
             <tr class="${a.status === '未到场' ? 'row-noshow' : ''}">
               <td>${i + 1}</td><td>${escapeHtml(a.name)}</td><td>${escapeHtml(a.phone)}</td>
               <td><button class="btn-status ${a.status === '未到场' ? 'noshow' : 'done'}" data-id="${a.id}" data-status="${a.status || '已完成'}">${a.status || '已完成'}</button></td>
+              <td><button class="btn-admin-del" data-id="${a.id}" data-name="${escapeHtml(a.name)}" data-date="${a.appt_date}" data-slot="${a.time_slot}">🗑</button></td>
             </tr>`).join('');
           html += `</tbody></table>`;
         } else {
@@ -849,10 +855,36 @@ async function loadAdminData(date) {
 
 // ── Status Toggle ──────────────────────────────────────────────────────────
 
-// Event delegation for status buttons (dynamically rendered)
+// Event delegation for status toggle + admin delete (dynamically rendered)
 document.getElementById('admin-table-wrap').addEventListener('click', async (e) => {
-  if (!e.target.classList.contains('btn-status')) return;
-  const btn = e.target;
+  const target = e.target;
+
+  // Admin delete button (R3)
+  if (target.classList.contains('btn-admin-del')) {
+    const id = target.dataset.id;
+    const name = target.dataset.name;
+    const date = target.dataset.date;
+    const slot = target.dataset.slot;
+    if (!confirm(`确定删除预约吗？\n${name} | ${date} ${slot}\n删除后不可恢复！`)) return;
+
+    target.disabled = true;
+    try {
+      const data = await api('DELETE', `/api/admin/appointments/${id}`);
+      toast(`✅ ${data.message}`, 'success');
+      // Refresh current admin view
+      const curDate = document.getElementById('admin-date').value;
+      await loadAdminData(curDate);
+    } catch (err) {
+      toast(err.message, 'error');
+    } finally {
+      target.disabled = false;
+    }
+    return;
+  }
+
+  // Status toggle
+  if (!target.classList.contains('btn-status')) return;
+  const btn = target;
   const id = btn.dataset.id;
   const currentStatus = btn.dataset.status;
   const newStatus = currentStatus === '未到场' ? '已完成' : '未到场';

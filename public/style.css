@@ -552,6 +552,18 @@ body {
 .btn-status:active { transform: scale(.95); }
 .btn-status:disabled { opacity: .5; cursor: not-allowed; }
 
+.btn-admin-del {
+  font-size: 12px;
+  padding: 3px 8px;
+  border-radius: 8px;
+  border: 1px solid var(--red-bg);
+  background: var(--red-bg);
+  cursor: pointer;
+  transition: all .15s;
+}
+.btn-admin-del:active { transform: scale(.95); }
+.btn-admin-del:disabled { opacity: .5; cursor: not-allowed; }
+
 .row-noshow td {
   color: var(--gray-400);
   text-decoration: line-through;
