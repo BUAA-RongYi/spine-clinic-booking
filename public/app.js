@@ -56,6 +56,11 @@ async function api(method, path, body) {
   } catch {
     throw new Error(`服务器返回异常 (${res.status})，请刷新页面后重试`);
   }
+  // M4: admin session expired — clear token and return to login gate
+  if (!res.ok && res.status === 401 && path.startsWith('/api/admin/') && path !== '/api/admin/verify') {
+    sessionStorage.removeItem('admin_token');
+    if (typeof updateAdminUI === 'function') updateAdminUI();
+  }
   if (!res.ok) throw new Error(data.error || `请求失败 (${res.status})`);
   return data;
 }

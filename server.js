@@ -11,6 +11,17 @@ const app = express();
 // ── Middleware ────────────────────────────────────────────────────────────────
 app.use(express.json());
 
+// M6: request logging (API routes only)
+app.use((req, res, next) => {
+  if (!req.path.startsWith('/api/')) return next();
+  const start = Date.now();
+  res.on('finish', () => {
+    const dur = Date.now() - start;
+    console.log(`[请求] ${req.method} ${req.path} → ${res.statusCode} (${dur}ms)`);
+  });
+  next();
+});
+
 // Health check (must be before static to avoid index.html intercepting)
 app.get('/api/health', (req, res) => {
   res.json({ status: 'ok', time: new Date().toISOString() });
@@ -28,7 +39,8 @@ const TIME_SLOTS = [
 const MAX_PER_SLOT = 8;
 // M3: password must come from environment — no hardcoded default
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD;
-let adminToken = null; // stored server-side, validated per request
+// M4: token with 12-hour expiry
+let adminSession = null; // { token, expiresAt }
 
 // ── Login Rate Limiter (M3) ───────────────────────────────────────────────────
 const loginAttempts = new Map(); // ip -> { count, lockedUntil }
@@ -61,7 +73,11 @@ function recordLoginSuccess(ip) {
 // ── Admin Auth Middleware ─────────────────────────────────────────────────────
 function requireAdmin(req, res, next) {
   const auth = req.headers.authorization;
-  if (!auth || !auth.startsWith('Bearer ') || auth.slice(7) !== adminToken) {
+  // M4: expired session
+  if (!adminSession || adminSession.expiresAt < Date.now()) {
+    return res.status(401).json({ error: '登录已过期，请重新登录' });
+  }
+  if (!auth || !auth.startsWith('Bearer ') || auth.slice(7) !== adminSession.token) {
     return res.status(401).json({ error: '未授权，请先登录管理后台' });
   }
   next();
@@ -108,6 +124,10 @@ async function initDB() {
     created_at TEXT    NOT NULL,
     UNIQUE(block_date, session)
   )`);
+  // S1: indexes for hot query paths
+  db.run('CREATE INDEX IF NOT EXISTS idx_appt_date_slot ON appointments(appt_date, time_slot)');
+  db.run('CREATE INDEX IF NOT EXISTS idx_appt_phone ON appointments(phone)');
+  db.run('CREATE INDEX IF NOT EXISTS idx_block_date ON blocked_dates(block_date)');
   persistDB();
 }
 
@@ -168,8 +188,10 @@ app.post('/api/admin/verify', loginRateLimit, (req, res) => {
     return res.status(403).json({ error: '密码错误' });
   }
   recordLoginSuccess(ip);
-  adminToken = Buffer.from(`admin_${Date.now()}_${Math.random()}`).toString('base64');
-  res.json({ success: true, token: adminToken });
+  const token = Buffer.from(`admin_${Date.now()}_${Math.random()}`).toString('base64');
+  // M4: 12-hour session
+  adminSession = { token, expiresAt: Date.now() + 12 * 60 * 60 * 1000 };
+  res.json({ success: true, token });
 });
 
 // GET /api/availability?date=YYYY-MM-DD
@@ -379,6 +401,8 @@ app.post('/api/appointments', async (req, res) => {
   // M5: wait for disk persist before responding
   await enqueueWrite(() => persistDB());
 
+  console.log(`[操作] 新预约 #${id} ${cleanName} ${phone} ${date} ${timeSlot}`);
+
   res.json({ success: true, message: '预约成功！', appointment: { id, name: cleanName, phone, date, timeSlot } });
 });
 
@@ -430,6 +454,11 @@ app.put('/api/appointments/:id', async (req, res) => {
   const newSlot = timeSlot || existing.time_slot;
   const newName = name || existing.name;
   const newPhone = existing.phone;
+
+  // S3: the TARGET slot must also satisfy the 2-hour rule
+  if (!canModifyOrCancel(newDate, newSlot)) {
+    return res.status(400).json({ error: '目标时段距开始不足2小时，无法修改到该时段' });
+  }
 
   const { min, max } = getDateRange();
   if (newDate < min || newDate > max) {
@@ -527,10 +556,13 @@ app.delete('/api/admin/appointments/:id', requireAdmin, async (req, res) => {
   const stmt = db.prepare('SELECT * FROM appointments WHERE id = ?');
   stmt.bind([id]);
   if (!stmt.step()) { stmt.free(); return res.status(404).json({ error: '预约记录不存在' }); }
+  const existing = stmt.getAsObject();
   stmt.free();
 
   db.run('DELETE FROM appointments WHERE id = ?', [id]);
   await enqueueWrite(() => persistDB());
+
+  console.log(`[操作] 管理员删除预约 #${id} (${existing.appt_date} ${existing.time_slot} ${existing.name})`);
 
   res.json({ success: true, message: '预约记录已删除' });
 });
@@ -565,11 +597,13 @@ app.put('/api/admin/appointments/:id/status', requireAdmin, async (req, res) => 
   const stmt = db.prepare('SELECT * FROM appointments WHERE id = ?');
   stmt.bind([id]);
   if (!stmt.step()) { stmt.free(); return res.status(404).json({ error: '预约记录不存在' }); }
+  const existing = stmt.getAsObject();
   stmt.free();
 
   db.run('UPDATE appointments SET status = ?, updated_at = ? WHERE id = ?', [status, nowStr(), id]);
   // M5: wait for disk persist before responding
   await enqueueWrite(() => persistDB());
+  console.log(`[操作] 管理员标记 #${id} (${existing.appt_date} ${existing.time_slot} ${existing.name}) 状态 → ${status}`);
   res.json({ success: true, message: `已标记为"${status}"`, status });
 });
 
@@ -643,6 +677,7 @@ app.post('/api/admin/blocked-dates', requireAdmin, async (req, res) => {
   db.run('INSERT INTO blocked_dates (block_date, session, created_at) VALUES (?, ?, ?)',
     [date, session, ts]);
   await enqueueWrite(() => persistDB());
+  console.log(`[操作] 管理员屏蔽日期 ${date} ${session}`);
   res.json({ success: true, message: '屏蔽设置成功' });
 });
 
@@ -655,6 +690,7 @@ app.delete('/api/admin/blocked-dates/:id', requireAdmin, async (req, res) => {
   stmt.free();
   db.run('DELETE FROM blocked_dates WHERE id = ?', [id]);
   await enqueueWrite(() => persistDB());
+  console.log(`[操作] 管理员取消屏蔽 #${id}`);
   res.json({ success: true, message: '已取消屏蔽' });
 });
 
