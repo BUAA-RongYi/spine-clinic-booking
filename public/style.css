@@ -392,6 +392,33 @@ body {
   transition: all .15s;
 }
 .cal-nav-btn-sm:active { background: var(--gray-100); }
+
+/* ── Month Picker ─────────────────────────────────────────────────────── */
+.month-picker-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.month-select {
+  flex: 1;
+  padding: 10px 8px;
+  border: 2px solid var(--gray-200);
+  border-radius: var(--radius-sm);
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--gray-800);
+  background: #fff;
+  -webkit-appearance: none;
+  appearance: none;
+  text-align: center;
+  text-align-last: center;
+  max-width: 90px;
+}
+.month-label {
+  font-size: 13px;
+  color: var(--gray-500);
+  flex-shrink: 0;
+}
 .btn-cal {
   width: 48px; height: 48px;
   border: 2px solid var(--blue);

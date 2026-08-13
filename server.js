@@ -632,7 +632,7 @@ app.get('/api/admin/patient-stats', requireAdmin, (req, res) => {
   // S6: fuzzy name match (escape LIKE wildcards from user input)
   const likeName = '%' + name.trim().replace(/[%_\\]/g, (c) => '\\' + c) + '%';
   const stmt = db.prepare(
-    "SELECT id, appt_date, time_slot, status, created_at FROM appointments WHERE name LIKE ? ESCAPE '\\' AND appt_date BETWEEN ? AND ? ORDER BY appt_date ASC, time_slot ASC"
+    "SELECT id, name, appt_date, time_slot, status, created_at FROM appointments WHERE name LIKE ? ESCAPE '\\' AND appt_date BETWEEN ? AND ? ORDER BY appt_date ASC, time_slot ASC"
   );
   stmt.bind([likeName, start, end]);
   const rows = [];
@@ -643,7 +643,17 @@ app.get('/api/admin/patient-stats', requireAdmin, (req, res) => {
   const attended = rows.filter(r => r.status !== '未到场').length;
   const noshow = rows.filter(r => r.status === '未到场').length;
 
-  res.json({ name: name.trim(), start, end, total, attended, noshow, appointments: rows });
+  // Group by name — makes fuzzy results readable (e.g. search 陈 → N people)
+  const byNameMap = {};
+  for (const r of rows) {
+    if (!byNameMap[r.name]) byNameMap[r.name] = { name: r.name, total: 0, attended: 0, noshow: 0 };
+    byNameMap[r.name].total++;
+    if (r.status === '未到场') byNameMap[r.name].noshow++;
+    else byNameMap[r.name].attended++;
+  }
+  const byName = Object.values(byNameMap).sort((a, b) => b.total - a.total);
+
+  res.json({ name: name.trim(), start, end, total, attended, noshow, byName, appointments: rows });
 });
 
 // ── Blocked Dates Management ───────────────────────────────────────────────────

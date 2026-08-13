@@ -532,11 +532,25 @@ async function cancelAppointment(id, phone) {
 
 // Default admin date to today
 document.getElementById('admin-date').value = todayStr();
-// S4: default month picker to current month
+// S4: populate month picker (year + month selects)
 (function() {
   const now = new Date();
-  document.getElementById('admin-month').value =
-    `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+  const yearSel = document.getElementById('admin-month-year');
+  const monSel = document.getElementById('admin-month-mon');
+  for (let y = now.getFullYear() - 1; y <= now.getFullYear() + 1; y++) {
+    const opt = document.createElement('option');
+    opt.value = y;
+    opt.textContent = y;
+    if (y === now.getFullYear()) opt.selected = true;
+    yearSel.appendChild(opt);
+  }
+  for (let m = 1; m <= 12; m++) {
+    const opt = document.createElement('option');
+    opt.value = String(m).padStart(2, '0');
+    opt.textContent = m;
+    if (m === now.getMonth() + 1) opt.selected = true;
+    monSel.appendChild(opt);
+  }
 })();
 
 // ── Admin calendar popup ──────────────────────────────────────────────────
@@ -757,9 +771,9 @@ document.getElementById('btn-admin-all').addEventListener('click', async () => {
 
 // S4: month view
 document.getElementById('btn-admin-month').addEventListener('click', async () => {
-  const month = document.getElementById('admin-month').value;
-  if (!month) return toast('请选择月份', 'error');
-  await loadAdminData(null, month);
+  const year = document.getElementById('admin-month-year').value;
+  const mon = document.getElementById('admin-month-mon').value;
+  await loadAdminData(null, `${year}-${mon}`);
 });
 
 async function loadAdminData(date, month) {
@@ -973,17 +987,37 @@ document.getElementById('btn-stat-query').addEventListener('click', async () => 
       return;
     }
 
+    const multiName = data.byName.length > 1;
+
     let html = `<div class="stat-summary-row">
       <div class="stat-card"><div class="stat-num">${data.total}</div><div class="stat-label">总预约</div></div>
       <div class="stat-card attended"><div class="stat-num">${data.attended}</div><div class="stat-label">已完成</div></div>
       <div class="stat-card noshow"><div class="stat-num">${data.noshow}</div><div class="stat-label">未到场</div></div>
     </div>`;
 
+    // Per-name breakdown when fuzzy search matched multiple people
+    if (multiName) {
+      html += `<div class="admin-summary" style="margin-top:12px;">👥 共 ${data.byName.length} 名患者，按人次排序</div>`;
+      html += `<table class="admin-table">
+        <thead><tr><th>姓名</th><th>总预约</th><th>已完成</th><th>未到场</th></tr></thead>
+        <tbody>`;
+      html += data.byName.map(b => `
+        <tr>
+          <td>${escapeHtml(b.name)}</td>
+          <td>${b.total}</td>
+          <td style="color:var(--green);font-weight:600;">${b.attended}</td>
+          <td style="color:var(--red);font-weight:600;">${b.noshow}</td>
+        </tr>`).join('');
+      html += `</tbody></table>`;
+    }
+
+    // Detail table (name column only needed for multi-name results)
     html += `<table class="admin-table" style="margin-top:12px;">
-      <thead><tr><th>日期</th><th>时间段</th><th>状态</th></tr></thead>
+      <thead><tr>${multiName ? '<th>姓名</th>' : ''}<th>日期</th><th>时间段</th><th>状态</th></tr></thead>
       <tbody>`;
     html += data.appointments.map(a => `
       <tr class="${a.status === '未到场' ? 'row-noshow' : ''}">
+        ${multiName ? `<td>${escapeHtml(a.name)}</td>` : ''}
         <td>${a.appt_date}</td>
         <td>${a.time_slot}</td>
         <td><span class="stat-status ${a.status === '未到场' ? 'noshow' : 'done'}">${a.status || '已完成'}</span></td>
