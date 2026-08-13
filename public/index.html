@@ -199,6 +199,10 @@
           </div>
         </div>
         <button id="btn-admin-query" class="btn-primary">查询</button>
+        <div style="display:flex;gap:8px;margin-top:8px;">
+          <input type="month" id="admin-month" style="flex:1;padding:8px 12px;border:2px solid var(--gray-200);border-radius:var(--radius-sm);font-size:14px;">
+          <button id="btn-admin-month" class="btn-outline" style="flex-shrink:0;">查看整月</button>
+        </div>
         <button id="btn-admin-all" class="btn-outline" style="margin-top:8px;">查看全部记录</button>
         <button id="btn-admin-export" class="btn-outline" style="margin-top:4px;color:var(--green);border-color:var(--green-bg);">📥 导出本月Excel</button>
         <button id="btn-admin-logout" class="btn-outline" style="margin-top:4px;color:var(--red);border-color:var(--red-bg);">退出管理</button>
@@ -259,11 +263,11 @@
         <h3 class="admin-collapse-header" data-target="stat-section">🔍 患者到场统计 <span class="collapse-arrow">▾</span></h3>
         <div id="stat-section" class="admin-collapse-body">
 
-        <p style="font-size:13px;color:var(--gray-400);margin-bottom:12px;">输入姓名和日期范围，统计预约及到场情况</p>
+        <p style="font-size:13px;color:var(--gray-400);margin-bottom:12px;">输入姓名（支持模糊查询）和日期范围，统计预约及到场情况</p>
 
         <div class="form-group">
           <label style="font-size:13px;">患者姓名</label>
-          <input type="text" id="stat-name" placeholder="请输入患者姓名" maxlength="20">
+          <input type="text" id="stat-name" placeholder="如输入'张'可查所有张姓患者" maxlength="20">
         </div>
         <div class="stat-date-row">
           <div class="form-group" style="flex:1;margin-bottom:0;">

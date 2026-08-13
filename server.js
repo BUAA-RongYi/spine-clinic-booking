@@ -1,3 +1,6 @@
+// S5: pin server timezone before any Date usage (clinic is in China)
+process.env.TZ = 'Asia/Shanghai';
+
 const express = require('express');
 const initSqlJs = require('sql.js');
 const path = require('path');
@@ -567,14 +570,20 @@ app.delete('/api/admin/appointments/:id', requireAdmin, async (req, res) => {
   res.json({ success: true, message: '预约记录已删除' });
 });
 
-// GET /api/admin/appointments?date=YYYY-MM-DD
+// GET /api/admin/appointments?date=YYYY-MM-DD | ?month=YYYY-MM
 app.get('/api/admin/appointments', requireAdmin, (req, res) => {
-  const { date } = req.query;
+  const { date, month } = req.query;
 
   let rows = [];
   if (date && /^\d{4}-\d{2}-\d{2}$/.test(date)) {
     const stmt = db.prepare('SELECT id, name, phone, appt_date, time_slot, status, created_at FROM appointments WHERE appt_date = ? ORDER BY time_slot ASC, created_at ASC');
     stmt.bind([date]);
+    while (stmt.step()) rows.push(stmt.getAsObject());
+    stmt.free();
+  } else if (month && /^\d{4}-\d{2}$/.test(month)) {
+    // S4: month filter (e.g. 2026-08) — avoids loading everything
+    const stmt = db.prepare("SELECT id, name, phone, appt_date, time_slot, status, created_at FROM appointments WHERE appt_date LIKE ? ORDER BY appt_date DESC, time_slot ASC");
+    stmt.bind([`${month}-%`]);
     while (stmt.step()) rows.push(stmt.getAsObject());
     stmt.free();
   } else {
@@ -620,10 +629,12 @@ app.get('/api/admin/patient-stats', requireAdmin, (req, res) => {
     return res.status(400).json({ error: '开始日期不能晚于结束日期' });
   }
 
+  // S6: fuzzy name match (escape LIKE wildcards from user input)
+  const likeName = '%' + name.trim().replace(/[%_\\]/g, (c) => '\\' + c) + '%';
   const stmt = db.prepare(
-    'SELECT id, appt_date, time_slot, status, created_at FROM appointments WHERE name = ? AND appt_date BETWEEN ? AND ? ORDER BY appt_date ASC, time_slot ASC'
+    "SELECT id, appt_date, time_slot, status, created_at FROM appointments WHERE name LIKE ? ESCAPE '\\' AND appt_date BETWEEN ? AND ? ORDER BY appt_date ASC, time_slot ASC"
   );
-  stmt.bind([name.trim(), start, end]);
+  stmt.bind([likeName, start, end]);
   const rows = [];
   while (stmt.step()) rows.push(stmt.getAsObject());
   stmt.free();

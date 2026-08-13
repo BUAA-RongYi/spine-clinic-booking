@@ -532,6 +532,12 @@ async function cancelAppointment(id, phone) {
 
 // Default admin date to today
 document.getElementById('admin-date').value = todayStr();
+// S4: default month picker to current month
+(function() {
+  const now = new Date();
+  document.getElementById('admin-month').value =
+    `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+})();
 
 // ── Admin calendar popup ──────────────────────────────────────────────────
 const adminCal = {
@@ -749,23 +755,32 @@ document.getElementById('btn-admin-all').addEventListener('click', async () => {
   await loadAdminData(null);
 });
 
-async function loadAdminData(date) {
+// S4: month view
+document.getElementById('btn-admin-month').addEventListener('click', async () => {
+  const month = document.getElementById('admin-month').value;
+  if (!month) return toast('请选择月份', 'error');
+  await loadAdminData(null, month);
+});
+
+async function loadAdminData(date, month) {
   const wrap = document.getElementById('admin-table-wrap');
   wrap.innerHTML = '<p style="text-align:center;color:var(--gray-400);padding:20px;">查询中...</p>';
 
   try {
-    const url = date ? `/api/admin/appointments?date=${date}` : '/api/admin/appointments';
+    let url = '/api/admin/appointments';
+    if (date) url = `/api/admin/appointments?date=${date}`;
+    else if (month) url = `/api/admin/appointments?month=${month}`;
     const data = await api('GET', url);
 
     if (!data.appointments.length) {
       wrap.innerHTML = `
         <div class="admin-table">
-          <div class="no-data">${date ? `${date} 暂无预约记录` : '暂无预约记录'}</div>
+          <div class="no-data">${date ? `${date} 暂无预约记录` : (month ? `${month} 暂无预约记录` : '暂无预约记录')}</div>
         </div>`;
       return;
     }
 
-    // Group by date if showing all
+    // Group by date if showing all or month view
     if (!date) {
       const slotOrder = ['8:30-9:30', '9:30-10:30', '10:30-11:30', '15:00-16:00', '16:00-17:00'];
       const groups = {};
