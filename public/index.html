@@ -98,7 +98,7 @@
     <div id="success-overlay" class="modal-overlay" style="display:none;">
       <div class="modal-box success-box">
         <div class="success-icon">✅</div>
-        <h3 style="text-align:center;margin:8px 0;">预约成功</h3>
+        <h3 class="success-title">预约成功</h3>
         <div class="success-details">
           <div class="success-row"><span>📅 日期</span><strong id="success-date"></strong></div>
           <div class="success-row"><span>🕐 时间段</span><strong id="success-slot"></strong></div>
@@ -107,7 +107,7 @@
           <div class="success-row"><span>🔢 编号</span><strong id="success-id"></strong></div>
         </div>
         <p class="success-hint">请截图保存，就诊时出示</p>
-        <button id="success-close" class="btn-primary" style="margin-top:12px;width:100%;">知道了</button>
+        <button id="success-close" class="btn-primary">知道了</button>
       </div>
     </div>
 
@@ -174,16 +174,16 @@
 
     <!-- Password gate -->
     <div id="admin-gate" class="admin-card">
-      <div style="text-align:center;padding:12px 0;">
-        <div style="font-size:40px;margin-bottom:8px;">🔒</div>
-        <p style="font-size:15px;font-weight:600;color:var(--gray-700);">管理员验证</p>
-        <p style="font-size:13px;color:var(--gray-400);margin-top:4px;">请输入管理员密码查看预约记录</p>
+      <div class="admin-gate-head">
+        <div class="admin-gate-icon">🔒</div>
+        <p class="admin-gate-title">管理员验证</p>
+        <p class="text-sm text-muted mt-4">请输入管理员密码查看预约记录</p>
       </div>
       <div class="form-group">
         <input type="password" id="admin-password" placeholder="请输入管理员密码" maxlength="20">
       </div>
       <button id="btn-admin-verify" class="btn-primary">验证进入</button>
-      <p id="admin-error" style="text-align:center;color:var(--red);font-size:13px;margin-top:8px;display:none;"></p>
+      <p id="admin-error" class="admin-error text-center mt-8" style="display:none;"></p>
     </div>
 
     <!-- Admin content (hidden until verified) -->
@@ -199,15 +199,15 @@
           </div>
         </div>
         <button id="btn-admin-query" class="btn-primary">查询</button>
-        <div class="month-picker-row" style="margin-top:8px;">
+        <div class="month-picker-row mt-8">
           <button id="btn-admin-month-prev" class="cal-nav-btn-sm">◀</button>
           <span id="admin-month-label" class="admin-month-label"></span>
           <button id="btn-admin-month-next" class="cal-nav-btn-sm">▶</button>
           <button id="btn-admin-month" class="btn-outline month-btn">查看整月</button>
         </div>
-        <button id="btn-admin-all" class="btn-outline" style="margin-top:8px;">查看全部记录</button>
-        <button id="btn-admin-export" class="btn-outline" style="margin-top:4px;color:var(--green);border-color:var(--green-bg);">📥 导出本月Excel</button>
-        <button id="btn-admin-logout" class="btn-outline" style="margin-top:4px;color:var(--red);border-color:var(--red-bg);">退出管理</button>
+        <button id="btn-admin-all" class="btn-outline mt-8">查看全部记录</button>
+        <button id="btn-admin-export" class="btn-outline mt-4 btn-green">📥 导出本月Excel</button>
+        <button id="btn-admin-logout" class="btn-outline mt-4 btn-red">退出管理</button>
       </div>
 
       <!-- Admin calendar popup -->
@@ -234,19 +234,22 @@
       <div id="admin-table-wrap" class="admin-table-wrap"></div>
 
       <!-- Blocked dates management -->
-      <div class="admin-card" style="margin-top:16px;">
+      <div class="admin-card mt-16">
         <h3 class="admin-collapse-header" data-target="blocked-section">🚫 屏蔽日期管理 <span class="collapse-arrow">▾</span></h3>
         <div id="blocked-section" class="admin-collapse-body">
 
-        <p style="font-size:13px;color:var(--gray-400);margin-bottom:12px;">屏蔽后，对应时段的号源将对患者不可见</p>
+        <p class="text-sm text-muted mb-12">屏蔽后，对应时段的号源将对患者不可见</p>
 
         <div class="block-form-row">
-          <div class="form-group" style="flex:1;margin-bottom:0;">
-            <label style="font-size:13px;">屏蔽日期</label>
-            <input type="date" id="block-date">
+          <div class="form-group flex-1 mb-0">
+            <label class="text-sm">屏蔽日期</label>
+            <div class="date-picker-row">
+              <input type="text" id="block-date" readonly placeholder="点击右侧日历选择">
+              <button class="btn-cal cal-popup-btn" data-target="block-date" title="选择日期">📅</button>
+            </div>
           </div>
-          <div class="form-group" style="flex:1;margin-bottom:0;">
-            <label style="font-size:13px;">屏蔽时段</label>
+          <div class="form-group flex-1 mb-0">
+            <label class="text-sm">屏蔽时段</label>
             <select id="block-session">
               <option value="morning">上午 (8:30-11:30)</option>
               <option value="afternoon">下午 (15:00-17:00)</option>
@@ -254,36 +257,42 @@
             </select>
           </div>
         </div>
-        <button id="btn-add-block" class="btn-primary" style="margin-top:12px;">添加屏蔽</button>
+        <button id="btn-add-block" class="btn-primary mt-12">添加屏蔽</button>
 
-        <div id="blocked-list" class="blocked-list" style="margin-top:16px;"></div>
+        <div id="blocked-list" class="blocked-list mt-16"></div>
         </div><!-- end blocked-section -->
       </div>
 
       <!-- Patient attendance query -->
-      <div class="admin-card" style="margin-top:16px;">
+      <div class="admin-card mt-16">
         <h3 class="admin-collapse-header" data-target="stat-section">🔍 患者到场统计 <span class="collapse-arrow">▾</span></h3>
         <div id="stat-section" class="admin-collapse-body">
 
-        <p style="font-size:13px;color:var(--gray-400);margin-bottom:12px;">输入姓名（支持模糊查询）和日期范围，统计预约及到场情况</p>
+        <p class="text-sm text-muted mb-12">输入姓名（支持模糊查询）和日期范围，统计预约及到场情况</p>
 
         <div class="form-group">
-          <label style="font-size:13px;">患者姓名</label>
+          <label class="text-sm">患者姓名</label>
           <input type="text" id="stat-name" placeholder="如输入'张'可查所有张姓患者" maxlength="20">
         </div>
         <div class="stat-date-row">
-          <div class="form-group" style="flex:1;margin-bottom:0;">
-            <label style="font-size:13px;">开始日期</label>
-            <input type="date" id="stat-start">
+          <div class="form-group flex-1 mb-0">
+            <label class="text-sm">开始日期</label>
+            <div class="date-picker-row">
+              <input type="text" id="stat-start" readonly placeholder="点击选择">
+              <button class="btn-cal cal-popup-btn" data-target="stat-start" title="选择日期">📅</button>
+            </div>
           </div>
-          <div class="form-group" style="flex:1;margin-bottom:0;">
-            <label style="font-size:13px;">结束日期</label>
-            <input type="date" id="stat-end">
+          <div class="form-group flex-1 mb-0">
+            <label class="text-sm">结束日期</label>
+            <div class="date-picker-row">
+              <input type="text" id="stat-end" readonly placeholder="点击选择">
+              <button class="btn-cal cal-popup-btn" data-target="stat-end" title="选择日期">📅</button>
+            </div>
           </div>
         </div>
-        <button id="btn-stat-query" class="btn-primary" style="margin-top:12px;">查询统计</button>
+        <button id="btn-stat-query" class="btn-primary mt-12">查询统计</button>
 
-        <div id="stat-result" style="margin-top:16px;"></div>
+        <div id="stat-result" class="mt-16"></div>
         </div><!-- end stat-section -->
       </div>
     </div>
@@ -292,7 +301,7 @@
   <!-- ── Footer ───────────────────────────────────────────────── -->
   <footer class="app-footer">
     脊柱侧弯门诊 · 预约时间 8:30-11:30 / 15:00-17:00<br>
-    <a href="/guide.html" style="color:var(--blue);text-decoration:none;">📋 患者操作手册</a>
+    <a href="/guide.html" class="guide-link">📋 患者操作手册</a>
   </footer>
 
   <script src="app.js"></script>

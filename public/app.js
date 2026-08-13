@@ -20,6 +20,7 @@ const state = {
   selectedSlot: null,   // slot label like '8:30-9:30'
   currentTab: 'booking',
   config: null,         // loaded from /api/config (P4)
+  calNavDir: 0,         // V4: -1 prev / +1 next month animation
 };
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
@@ -200,6 +201,20 @@ async function renderCalendar() {
     grid.appendChild(cell);
   }
 
+  // V4: month-flip slide animation
+  if (state.calNavDir !== 0) {
+    const dir = state.calNavDir;
+    state.calNavDir = 0;
+    grid.style.transition = 'none';
+    grid.style.transform = `translateX(${dir * 24}px)`;
+    grid.style.opacity = '0';
+    requestAnimationFrame(() => requestAnimationFrame(() => {
+      grid.style.transition = 'transform .15s ease-out, opacity .15s ease-out';
+      grid.style.transform = 'translateX(0)';
+      grid.style.opacity = '1';
+    }));
+  }
+
   // Re-render slots if a date is selected
   if (state.selectedDate) await renderSlots(state.selectedDate);
 }
@@ -348,6 +363,7 @@ document.getElementById('cal-prev').addEventListener('click', () => {
   } else {
     state.calMonth--;
   }
+  state.calNavDir = -1; // V4: slide from left
   state.selectedDate = null;
   state.selectedSlot = null;
   document.getElementById('slots-card').style.display = 'none';
@@ -361,6 +377,7 @@ document.getElementById('cal-next').addEventListener('click', () => {
   } else {
     state.calMonth++;
   }
+  state.calNavDir = 1; // V4: slide from right
   state.selectedDate = null;
   state.selectedSlot = null;
   document.getElementById('slots-card').style.display = 'none';
@@ -376,12 +393,12 @@ async function autoLoadMyAppointments() {
   const u = getSavedUser();
   const list = document.getElementById('myappt-list');
   if (!u.phone || !u.name) {
-    list.innerHTML = '<div class="appt-item" style="text-align:center;color:var(--gray-400);">请先输入姓名和手机号，然后点击"查询预约"</div>';
+    list.innerHTML = '<div class="appt-item" style="text-align:center;color:var(--gray-600);">请先输入姓名和手机号，然后点击"查询预约"</div>';
     return;
   }
   document.getElementById('lookup-name').value = u.name;
   document.getElementById('lookup-phone').value = u.phone;
-  list.innerHTML = '<p style="text-align:center;color:var(--gray-400);padding:20px;">查询中...</p>';
+  list.innerHTML = '<p style="text-align:center;color:var(--gray-600);padding:20px;">查询中...</p>';
   try {
     const data = await api('GET', `/api/appointments?phone=${encodeURIComponent(u.phone)}&name=${encodeURIComponent(u.name)}`);
     renderMyAppointments(data.appointments);
@@ -400,7 +417,7 @@ document.getElementById('btn-lookup').addEventListener('click', async () => {
   saveUser(name, phone);
 
   const list = document.getElementById('myappt-list');
-  list.innerHTML = '<p style="text-align:center;color:var(--gray-400);padding:20px;">查询中...</p>';
+  list.innerHTML = '<p style="text-align:center;color:var(--gray-600);padding:20px;">查询中...</p>';
 
   try {
     const data = await api('GET', `/api/appointments?phone=${encodeURIComponent(phone)}&name=${encodeURIComponent(name)}`);
@@ -414,7 +431,7 @@ document.getElementById('btn-lookup').addEventListener('click', async () => {
 function renderMyAppointments(appts) {
   const list = document.getElementById('myappt-list');
   if (!appts.length) {
-    list.innerHTML = '<div class="appt-item" style="text-align:center;color:var(--gray-400);">暂无预约记录</div>';
+    list.innerHTML = '<div class="appt-item" style="text-align:center;color:var(--gray-600);">暂无预约记录</div>';
     return;
   }
 
@@ -540,6 +557,7 @@ const adminCal = {
   year: new Date().getFullYear(),
   month: new Date().getMonth() + 1,
 };
+let adminCalNavDir = 0; // V4: popup calendar flip direction
 
 function renderAdminCalendar() {
   const { year, month } = adminCal;
@@ -565,30 +583,54 @@ function renderAdminCalendar() {
     cell.className = 'cal-day';
 
     if (dateStr === today) cell.classList.add('today');
-    if (dateStr === document.getElementById('admin-date').value) cell.classList.add('selected');
+    if (dateStr === document.getElementById(calPopupTarget).value) cell.classList.add('selected');
 
     cell.innerHTML = `<span class="cal-day-num">${d}</span>`;
     cell.addEventListener('click', () => {
-      document.getElementById('admin-date').value = dateStr;
+      document.getElementById(calPopupTarget).value = dateStr;
       document.getElementById('admin-cal-overlay').style.display = 'none';
-      // Auto query
-      document.getElementById('btn-admin-query').click();
+      // Auto query only for the main date picker
+      if (calPopupTarget === 'admin-date') {
+        document.getElementById('btn-admin-query').click();
+      }
     });
 
     grid.appendChild(cell);
   }
+
+  // V4: popup month-flip animation
+  if (adminCalNavDir !== 0) {
+    const dir = adminCalNavDir;
+    adminCalNavDir = 0;
+    grid.style.transition = 'none';
+    grid.style.transform = `translateX(${dir * 24}px)`;
+    grid.style.opacity = '0';
+    requestAnimationFrame(() => requestAnimationFrame(() => {
+      grid.style.transition = 'transform .15s ease-out, opacity .15s ease-out';
+      grid.style.transform = 'translateX(0)';
+      grid.style.opacity = '1';
+    }));
+  }
 }
 
-document.getElementById('btn-admin-cal').addEventListener('click', () => {
-  // Sync calendar to admin date
-  const cur = document.getElementById('admin-date').value;
-  if (cur) {
+// U5: shared calendar popup — fills whichever input requested it
+let calPopupTarget = 'admin-date';
+
+function openAdminCalendarFor(targetId) {
+  calPopupTarget = targetId;
+  const cur = document.getElementById(targetId).value;
+  if (cur && /^\d{4}-\d{2}-\d{2}$/.test(cur)) {
     const [y, m] = cur.split('-').map(Number);
     adminCal.year = y;
     adminCal.month = m;
   }
   renderAdminCalendar();
   document.getElementById('admin-cal-overlay').style.display = 'flex';
+}
+
+document.getElementById('btn-admin-cal').addEventListener('click', () => openAdminCalendarFor('admin-date'));
+document.querySelectorAll('.cal-popup-btn').forEach((btn) => {
+  btn.addEventListener('click', () => openAdminCalendarFor(btn.dataset.target));
 });
 
 document.getElementById('admin-cal-close').addEventListener('click', () => {
@@ -602,12 +644,14 @@ document.getElementById('admin-cal-overlay').addEventListener('click', (e) => {
 document.getElementById('admin-cal-prev').addEventListener('click', () => {
   if (adminCal.month === 1) { adminCal.year--; adminCal.month = 12; }
   else { adminCal.month--; }
+  adminCalNavDir = -1; // V4
   renderAdminCalendar();
 });
 
 document.getElementById('admin-cal-next').addEventListener('click', () => {
   if (adminCal.month === 12) { adminCal.year++; adminCal.month = 1; }
   else { adminCal.month++; }
+  adminCalNavDir = 1; // V4
   renderAdminCalendar();
 });
 
@@ -814,7 +858,7 @@ function renderSlotGroupsHtml(listBySlot) {
 
 async function loadAdminData(date, month) {
   const wrap = document.getElementById('admin-table-wrap');
-  wrap.innerHTML = '<p style="text-align:center;color:var(--gray-400);padding:20px;">查询中...</p>';
+  wrap.innerHTML = '<p style="text-align:center;color:var(--gray-600);padding:20px;">查询中...</p>';
 
   try {
     let url = '/api/admin/appointments';
@@ -1006,7 +1050,7 @@ document.getElementById('btn-stat-query').addEventListener('click', async () => 
   if (!name) return toast('请输入患者姓名', 'error');
   if (!start || !end) return toast('请选择日期范围', 'error');
 
-  result.innerHTML = '<p style="text-align:center;color:var(--gray-400);padding:12px;">查询中...</p>';
+  result.innerHTML = '<p style="text-align:center;color:var(--gray-600);padding:12px;">查询中...</p>';
 
   try {
     const data = await api('GET', `/api/admin/patient-stats?name=${encodeURIComponent(name)}&start=${start}&end=${end}`);
@@ -1069,7 +1113,7 @@ async function loadBlockedDates() {
   try {
     const data = await api('GET', '/api/admin/blocked-dates');
     if (!data.blockedDates.length) {
-      list.innerHTML = '<div style="text-align:center;color:var(--gray-400);padding:12px;font-size:14px;">暂无屏蔽日期</div>';
+      list.innerHTML = '<div style="text-align:center;color:var(--gray-600);padding:12px;font-size:14px;">暂无屏蔽日期</div>';
       return;
     }
 
@@ -1142,7 +1186,6 @@ async function init() {
   // Set block-date defaults for admin panel
   const blockDateInput = document.getElementById('block-date');
   if (blockDateInput) {
-    blockDateInput.setAttribute('min', todayStr());
     blockDateInput.value = todayStr();
   }
   // Admin collapsible sections

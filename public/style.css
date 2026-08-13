@@ -5,6 +5,23 @@
 /* ── Reset & Base ────────────────────────────────────────────────────────── */
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
+/* ── Utility Classes (V2: replace inline styles) ─────────────────────────── */
+.text-center { text-align: center; }
+.text-sm { font-size: 13px; }
+.text-muted { color: var(--gray-600); }        /* U2: ≥4.5:1 on white */
+.mt-4 { margin-top: 4px; }
+.mt-8 { margin-top: 8px; }
+.mt-12 { margin-top: 12px; }
+.mt-16 { margin-top: 16px; }
+.mb-8 { margin-bottom: 8px; }
+.mb-12 { margin-bottom: 12px; }
+.mb-0 { margin-bottom: 0; }
+.w-full { width: 100%; }
+.flex-1 { flex: 1; }
+.btn-green { color: var(--green); border-color: var(--green-bg); }
+.btn-red { color: var(--red); border-color: var(--red-bg); }
+.guide-link { color: var(--blue); text-decoration: none; }
+
 :root {
   --blue:       #2563eb;
   --blue-light: #dbeafe;
@@ -151,7 +168,7 @@ body {
   grid-template-columns: repeat(7, 1fr);
   text-align: center;
   font-size: 13px;
-  color: var(--gray-400);
+  color: var(--gray-600);
   font-weight: 600;
   margin-bottom: 6px;
   padding: 0 2px;
@@ -161,6 +178,7 @@ body {
   grid-template-columns: repeat(7, 1fr);
   gap: 4px;
   text-align: center;
+  transition: transform .15s ease-out, opacity .15s ease-out; /* V4: month flip */
 }
 .cal-day {
   aspect-ratio: 1;
@@ -203,7 +221,7 @@ body {
   line-height: 1.4;
 }
 .cal-badge.avail   { background: var(--green-bg); color: var(--green); }
-.cal-badge.full    { background: var(--gray-100); color: var(--gray-400); }
+.cal-badge.full    { background: var(--gray-100); color: var(--gray-600); }
 .cal-badge.blocked { background: var(--orange-bg); color: var(--orange); }
 
 .calendar-legend {
@@ -249,7 +267,8 @@ body {
   background: var(--gray-100);
   color: var(--gray-400); cursor: not-allowed;
 }
-.slot-time { font-weight: 600; }
+.slot-time { font-weight: 600; font-variant-numeric: tabular-nums; }
+.stat-num, .slot-remaining, .cal-badge, .month-day-stat { font-variant-numeric: tabular-nums; }
 .slot-remaining { font-size: 13px; }
 .slot-remaining .num { font-weight: 700; color: var(--blue); }
 .slot-item.full .slot-remaining .num { color: var(--gray-400); }
@@ -331,7 +350,7 @@ body {
 
 .form-hint {
   margin-top: 12px;
-  font-size: 12px; color: var(--gray-400);
+  font-size: 12px; color: var(--gray-600);
   text-align: center;
 }
 
@@ -477,7 +496,7 @@ body {
 }
 .admin-table tr:last-child td { border-bottom: none; }
 .admin-table .no-data {
-  text-align: center; padding: 24px; color: var(--gray-400);
+  text-align: center; padding: 24px; color: var(--gray-600);
 }
 .admin-summary {
   background: #fff; border-radius: var(--radius);
@@ -565,7 +584,7 @@ body {
 .slot-empty {
   text-align: center;
   padding: 12px;
-  color: var(--gray-400);
+  color: var(--gray-600);
   font-size: 13px;
 }
 
@@ -689,7 +708,7 @@ body {
 .stat-empty {
   text-align: center;
   padding: 16px;
-  color: var(--gray-400);
+  color: var(--gray-600);
   font-size: 14px;
 }
 
@@ -701,6 +720,29 @@ body {
 }
 .success-icon {
   font-size: 48px;
+}
+.success-title {
+  text-align: center;
+  margin: 8px 0;
+}
+
+/* ── Admin Gate ─────────────────────────────────────────────────────── */
+.admin-gate-head {
+  text-align: center;
+  padding: 12px 0;
+}
+.admin-gate-icon {
+  font-size: 40px;
+  margin-bottom: 8px;
+}
+.admin-gate-title {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--gray-700);
+}
+.admin-error {
+  color: var(--red);
+  font-size: 13px;
 }
 .success-details {
   background: var(--gray-50);
