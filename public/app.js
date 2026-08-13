@@ -3,7 +3,8 @@
    ═══════════════════════════════════════════════════════════════════════════ */
 
 // ── Constants ────────────────────────────────────────────────────────────────
-const TIME_SLOTS = [
+// P4: fallback slots — overwritten by GET /api/config at startup
+let TIME_SLOTS = [
   { label: '8:30-9:30',   value: '8:30-9:30' },
   { label: '9:30-10:30',  value: '9:30-10:30' },
   { label: '10:30-11:30', value: '10:30-11:30' },
@@ -18,6 +19,7 @@ const state = {
   selectedDate: null,   // 'YYYY-MM-DD'
   selectedSlot: null,   // slot label like '8:30-9:30'
   currentTab: 'booking',
+  config: null,         // loaded from /api/config (P4)
 };
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
@@ -532,26 +534,6 @@ async function cancelAppointment(id, phone) {
 
 // Default admin date to today
 document.getElementById('admin-date').value = todayStr();
-// S4: populate month picker (year + month selects)
-(function() {
-  const now = new Date();
-  const yearSel = document.getElementById('admin-month-year');
-  const monSel = document.getElementById('admin-month-mon');
-  for (let y = now.getFullYear() - 1; y <= now.getFullYear() + 1; y++) {
-    const opt = document.createElement('option');
-    opt.value = y;
-    opt.textContent = y;
-    if (y === now.getFullYear()) opt.selected = true;
-    yearSel.appendChild(opt);
-  }
-  for (let m = 1; m <= 12; m++) {
-    const opt = document.createElement('option');
-    opt.value = String(m).padStart(2, '0');
-    opt.textContent = m;
-    if (m === now.getMonth() + 1) opt.selected = true;
-    monSel.appendChild(opt);
-  }
-})();
 
 // ── Admin calendar popup ──────────────────────────────────────────────────
 const adminCal = {
@@ -769,12 +751,66 @@ document.getElementById('btn-admin-all').addEventListener('click', async () => {
   await loadAdminData(null);
 });
 
-// S4: month view
-document.getElementById('btn-admin-month').addEventListener('click', async () => {
-  const year = document.getElementById('admin-month-year').value;
-  const mon = document.getElementById('admin-month-mon').value;
-  await loadAdminData(null, `${year}-${mon}`);
+// S4: month view with prev/next arrows
+const adminMonth = {
+  year: new Date().getFullYear(),
+  month: new Date().getMonth() + 1,
+};
+
+function renderAdminMonthLabel() {
+  document.getElementById('admin-month-label').textContent =
+    `${adminMonth.year}年 ${adminMonth.month}月`;
+}
+
+function adminMonthValue() {
+  return `${adminMonth.year}-${String(adminMonth.month).padStart(2, '0')}`;
+}
+
+document.getElementById('btn-admin-month-prev').addEventListener('click', () => {
+  if (adminMonth.month === 1) { adminMonth.year--; adminMonth.month = 12; }
+  else { adminMonth.month--; }
+  renderAdminMonthLabel();
 });
+
+document.getElementById('btn-admin-month-next').addEventListener('click', () => {
+  if (adminMonth.month === 12) { adminMonth.year++; adminMonth.month = 1; }
+  else { adminMonth.month++; }
+  renderAdminMonthLabel();
+});
+
+document.getElementById('btn-admin-month').addEventListener('click', async () => {
+  await loadAdminData(null, adminMonthValue());
+});
+
+renderAdminMonthLabel();
+
+const SLOT_ORDER = ['8:30-9:30', '9:30-10:30', '10:30-11:30', '15:00-16:00', '16:00-17:00'];
+
+// P5: shared slot-group renderer (used by single-date view and 查看全部)
+function renderSlotGroupsHtml(listBySlot) {
+  let html = '';
+  for (const slot of SLOT_ORDER) {
+    const list = listBySlot[slot] || [];
+    html += `<div class="slot-group">`;
+    html += `<div class="slot-group-header">🕐 <strong>${slot}</strong> · ${list.length}人</div>`;
+    if (list.length > 0) {
+      html += `<table class="admin-table slot-table">
+        <thead><tr><th>#</th><th>姓名</th><th>手机号</th><th>完成状态</th><th>操作</th></tr></thead>
+        <tbody>`;
+      html += list.map((a, i) => `
+        <tr class="${a.status === '未到场' ? 'row-noshow' : ''}">
+          <td>${i + 1}</td><td>${escapeHtml(a.name)}</td><td>${escapeHtml(a.phone)}</td>
+          <td><button class="btn-status ${a.status === '未到场' ? 'noshow' : 'done'}" data-id="${a.id}" data-status="${a.status || '已完成'}">${a.status || '已完成'}</button></td>
+          <td><button class="btn-admin-del" data-id="${a.id}" data-name="${escapeHtml(a.name)}" data-date="${a.appt_date}" data-slot="${a.time_slot}">🗑</button></td>
+        </tr>`).join('');
+      html += `</tbody></table>`;
+    } else {
+      html += `<div class="slot-empty">暂无预约</div>`;
+    }
+    html += `</div>`;
+  }
+  return html;
+}
 
 async function loadAdminData(date, month) {
   const wrap = document.getElementById('admin-table-wrap');
@@ -794,12 +830,44 @@ async function loadAdminData(date, month) {
       return;
     }
 
-    // Group by date if showing all or month view
+    // ── Month view (P2): compact per-day summary list ──
+    if (month) {
+      const dayMap = {};
+      for (const a of data.appointments) {
+        if (!dayMap[a.appt_date]) dayMap[a.appt_date] = { total: 0, attended: 0, noshow: 0 };
+        dayMap[a.appt_date].total++;
+        if (a.status === '未到场') dayMap[a.appt_date].noshow++;
+        else dayMap[a.appt_date].attended++;
+      }
+      const dates = Object.keys(dayMap).sort().reverse();
+      const total = data.appointments.length;
+
+      let html = `<div class="month-summary">
+        📊 <strong>${month}月</strong> · 共 <strong>${total}</strong> 人预约
+        </div>`;
+
+      html += dates.map((d) => {
+        const s = dayMap[d];
+        return `
+          <div class="month-day-row">
+            <div class="month-day-info">
+              <strong>${d}</strong>
+              <span class="month-day-stat">共${s.total}人 · ✅${s.attended} · ❌${s.noshow}</span>
+            </div>
+            <button class="btn-day-detail" data-date="${d}">查看</button>
+          </div>`;
+      }).join('');
+
+      wrap.innerHTML = html;
+      return;
+    }
+
+    // ── All view: per-date slot breakdown with monthly summary ──
     if (!date) {
-      const slotOrder = ['8:30-9:30', '9:30-10:30', '10:30-11:30', '15:00-16:00', '16:00-17:00'];
       const groups = {};
       let monthTotal = 0;
       const now = new Date();
+      // P1: count against the CURRENT month for 查看全部 (summary = this month)
       const currentMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
 
       for (const a of data.appointments) {
@@ -809,78 +877,32 @@ async function loadAdminData(date, month) {
       }
       const dates = Object.keys(groups).sort().reverse();
 
-      // Monthly summary card
       wrap.innerHTML = `<div class="month-summary">
         📊 <strong>${currentMonth}月</strong> · 共 <strong>${monthTotal}</strong> 人预约
         </div>`;
 
       wrap.innerHTML += dates.map((d) => {
-        // Group this date's appointments by time slot
         const slotGroups = {};
         for (const a of groups[d]) {
           if (!slotGroups[a.time_slot]) slotGroups[a.time_slot] = [];
           slotGroups[a.time_slot].push(a);
         }
-
-        let html = `<div class="admin-summary">📅 <strong>${d}</strong> · 共 ${groups[d].length} 人预约</div>`;
-
-        for (const slot of slotOrder) {
-          const list = slotGroups[slot] || [];
-          html += `<div class="slot-group">`;
-          html += `<div class="slot-group-header">🕐 <strong>${slot}</strong> · ${list.length}人</div>`;
-          if (list.length > 0) {
-            html += `<table class="admin-table slot-table">
-              <thead><tr><th>#</th><th>姓名</th><th>手机号</th><th>完成状态</th><th>操作</th></tr></thead>
-              <tbody>`;
-            html += list.map((a, i) => `
-              <tr class="${a.status === '未到场' ? 'row-noshow' : ''}">
-                <td>${i + 1}</td><td>${escapeHtml(a.name)}</td><td>${escapeHtml(a.phone)}</td>
-                <td><button class="btn-status ${a.status === '未到场' ? 'noshow' : 'done'}" data-id="${a.id}" data-status="${a.status || '已完成'}">${a.status || '已完成'}</button></td>
-                <td><button class="btn-admin-del" data-id="${a.id}" data-name="${escapeHtml(a.name)}" data-date="${a.appt_date}" data-slot="${a.time_slot}">🗑</button></td>
-              </tr>`).join('');
-            html += `</tbody></table>`;
-          } else {
-            html += `<div class="slot-empty">暂无预约</div>`;
-          }
-          html += `</div>`;
-        }
-        html += '<div style="height:12px;"></div>';
-        return html;
+        return `<div class="admin-summary">📅 <strong>${d}</strong> · 共 ${groups[d].length} 人预约</div>` +
+          renderSlotGroupsHtml(slotGroups) + '<div style="height:12px;"></div>';
       }).join('');
-    } else {
-      // Group by time slot for single-date view
-      const slotOrder = ['8:30-9:30', '9:30-10:30', '10:30-11:30', '15:00-16:00', '16:00-17:00'];
-      const slotGroups = {};
-      for (const a of data.appointments) {
-        if (!slotGroups[a.time_slot]) slotGroups[a.time_slot] = [];
-        slotGroups[a.time_slot].push(a);
-      }
-
-      let html = `<div class="admin-summary">📅 <strong>${date}</strong> · 共 ${data.appointments.length} 人预约</div>`;
-
-      for (const slot of slotOrder) {
-        const list = slotGroups[slot] || [];
-        html += `<div class="slot-group">`;
-        html += `<div class="slot-group-header">🕐 <strong>${slot}</strong> · ${list.length}人</div>`;
-        if (list.length > 0) {
-          html += `<table class="admin-table slot-table">
-            <thead><tr><th>#</th><th>姓名</th><th>手机号</th><th>完成状态</th><th>操作</th></tr></thead>
-            <tbody>`;
-          html += list.map((a, i) => `
-            <tr class="${a.status === '未到场' ? 'row-noshow' : ''}">
-              <td>${i + 1}</td><td>${escapeHtml(a.name)}</td><td>${escapeHtml(a.phone)}</td>
-              <td><button class="btn-status ${a.status === '未到场' ? 'noshow' : 'done'}" data-id="${a.id}" data-status="${a.status || '已完成'}">${a.status || '已完成'}</button></td>
-              <td><button class="btn-admin-del" data-id="${a.id}" data-name="${escapeHtml(a.name)}" data-date="${a.appt_date}" data-slot="${a.time_slot}">🗑</button></td>
-            </tr>`).join('');
-          html += `</tbody></table>`;
-        } else {
-          html += `<div class="slot-empty">暂无预约</div>`;
-        }
-        html += `</div>`;
-      }
-
-      wrap.innerHTML = html;
+      return;
     }
+
+    // ── Single-date view ──
+    const slotGroups = {};
+    for (const a of data.appointments) {
+      if (!slotGroups[a.time_slot]) slotGroups[a.time_slot] = [];
+      slotGroups[a.time_slot].push(a);
+    }
+
+    wrap.innerHTML =
+      `<div class="admin-summary">📅 <strong>${date}</strong> · 共 ${data.appointments.length} 人预约</div>` +
+      renderSlotGroupsHtml(slotGroups);
   } catch (e) {
     toast(e.message, 'error');
     wrap.innerHTML = '';
@@ -889,9 +911,16 @@ async function loadAdminData(date, month) {
 
 // ── Status Toggle ──────────────────────────────────────────────────────────
 
-// Event delegation for status toggle + admin delete (dynamically rendered)
+// Event delegation for status toggle + admin delete + day detail (dynamically rendered)
 document.getElementById('admin-table-wrap').addEventListener('click', async (e) => {
   const target = e.target;
+
+  // Month view → jump to single-day detail (P2)
+  if (target.classList.contains('btn-day-detail')) {
+    document.getElementById('admin-date').value = target.dataset.date;
+    await loadAdminData(target.dataset.date);
+    return;
+  }
 
   // Admin delete button (R3)
   if (target.classList.contains('btn-admin-del')) {
@@ -1100,7 +1129,14 @@ async function removeBlockedDate(id) {
 // INIT
 // ═══════════════════════════════════════════════════════════════════════════
 
-function init() {
+async function init() {
+  // P4: load booking rules config from server (single source of truth)
+  try {
+    const cfg = await api('GET', '/api/config');
+    state.config = cfg;
+    TIME_SLOTS = cfg.slots.map(s => ({ label: s.label, value: s.label }));
+  } catch (e) { /* keep fallback slots */ }
+
   prefillUser();
   renderCalendar();
   // Set block-date defaults for admin panel

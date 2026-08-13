@@ -7,7 +7,8 @@ const path = require('path');
 const fs = require('fs');
 
 const PORT = process.env.PORT || 3000;
-const DB_PATH = path.join(__dirname, 'bookings.db');
+// P3: DB_PATH overridable so tests can use a temp database
+const DB_PATH = process.env.DB_PATH || path.join(__dirname, 'bookings.db');
 
 const app = express();
 
@@ -28,6 +29,16 @@ app.use((req, res, next) => {
 // Health check (must be before static to avoid index.html intercepting)
 app.get('/api/health', (req, res) => {
   res.json({ status: 'ok', time: new Date().toISOString() });
+});
+
+// P4: booking rules config — single source of truth consumed by the frontend
+app.get('/api/config', (req, res) => {
+  res.json({
+    slots: TIME_SLOTS.map(s => ({ label: s.label, session: s.session })),
+    maxPerSlot: MAX_PER_SLOT,
+    cancelWindowHours: 2,
+    bookingWindowDays: 30,
+  });
 });
 
 // ── Constants ─────────────────────────────────────────────────────────────────

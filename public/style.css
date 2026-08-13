@@ -396,28 +396,27 @@ body {
 /* ── Month Picker ─────────────────────────────────────────────────────── */
 .month-picker-row {
   display: flex;
-  align-items: center;
-  gap: 6px;
+  align-items: stretch;
+  gap: 8px;
 }
-.month-select {
+.admin-month-label {
   flex: 1;
-  padding: 10px 8px;
-  border: 2px solid var(--gray-200);
-  border-radius: var(--radius-sm);
+  display: flex;
+  align-items: center;
+  justify-content: center;
   font-size: 14px;
-  font-weight: 500;
+  font-weight: 700;
   color: var(--gray-800);
-  background: #fff;
-  -webkit-appearance: none;
-  appearance: none;
-  text-align: center;
-  text-align-last: center;
-  max-width: 90px;
+  background: var(--gray-50);
+  border-radius: var(--radius-sm);
+  border: 2px solid var(--gray-200);
+  min-width: 0;
 }
-.month-label {
-  font-size: 13px;
-  color: var(--gray-500);
+.month-btn {
+  width: auto !important;
   flex-shrink: 0;
+  padding: 10px 14px !important;
+  font-size: 14px !important;
 }
 .btn-cal {
   width: 48px; height: 48px;
@@ -496,6 +495,44 @@ body {
   font-size: 15px;
   text-align: center;
 }
+
+/* ── Month Day Rows (P2) ─────────────────────────────────────────────── */
+.month-day-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: #fff;
+  border-radius: var(--radius-sm);
+  padding: 12px 14px;
+  margin-bottom: 8px;
+  box-shadow: var(--shadow);
+}
+.month-day-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.month-day-info strong {
+  font-size: 15px;
+  color: var(--gray-800);
+}
+.month-day-stat {
+  font-size: 12px;
+  color: var(--gray-600);
+}
+.btn-day-detail {
+  padding: 8px 16px;
+  border: 2px solid var(--blue);
+  border-radius: var(--radius-sm);
+  background: var(--blue-light);
+  color: var(--blue);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: all .15s;
+}
+.btn-day-detail:active { background: var(--blue); color: #fff; }
 
 /* ── Slot Group (admin single-date view) ───────────────────────────────── */
 .slot-group {

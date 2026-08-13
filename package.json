@@ -4,7 +4,8 @@
   "description": "脊柱侧弯门诊预约系统",
   "main": "server.js",
   "scripts": {
-    "start": "node server.js"
+    "start": "node server.js",
+    "test": "node --test tests/api.test.js"
   },
   "dependencies": {
     "express": "^4.21.0",

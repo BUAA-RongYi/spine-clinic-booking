@@ -200,11 +200,10 @@
         </div>
         <button id="btn-admin-query" class="btn-primary">查询</button>
         <div class="month-picker-row" style="margin-top:8px;">
-          <select id="admin-month-year" class="month-select"></select>
-          <span class="month-label">年</span>
-          <select id="admin-month-mon" class="month-select"></select>
-          <span class="month-label">月</span>
-          <button id="btn-admin-month" class="btn-outline" style="flex-shrink:0;">查看整月</button>
+          <button id="btn-admin-month-prev" class="cal-nav-btn-sm">◀</button>
+          <span id="admin-month-label" class="admin-month-label"></span>
+          <button id="btn-admin-month-next" class="cal-nav-btn-sm">▶</button>
+          <button id="btn-admin-month" class="btn-outline month-btn">查看整月</button>
         </div>
         <button id="btn-admin-all" class="btn-outline" style="margin-top:8px;">查看全部记录</button>
         <button id="btn-admin-export" class="btn-outline" style="margin-top:4px;color:var(--green);border-color:var(--green-bg);">📥 导出本月Excel</button>
