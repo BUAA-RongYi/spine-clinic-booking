@@ -362,6 +362,17 @@ select:focus-visible {
 .slot-remaining .num { font-size: var(--fs-body); font-weight: 700; color: var(--primary-dark); }
 .slot-item.full .slot-remaining .num { color: var(--gray-400); }
 .slot-item.blocked .slot-remaining .num { color: var(--orange); }
+/* 已截止：2小时规则，区别于"满"（名额未满但时间已过） */
+.slot-item.too-late {
+  border-color: var(--gray-200);
+  background: var(--gray-50);
+  color: var(--gray-500);
+  border-left-color: var(--gray-400);
+  cursor: pointer;
+}
+.slot-item.too-late .slot-time { color: var(--gray-500); }
+.slot-item.too-late .slot-remaining .num { color: var(--gray-500); }
+.slot-item.too-late:active { background: var(--gray-100); }
 
 /* ── Modal ───────────────────────────────────────────────────────────────── */
 .modal-overlay {

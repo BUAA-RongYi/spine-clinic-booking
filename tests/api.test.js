@@ -187,7 +187,22 @@ test('10. 配置接口返回时段与规则', async () => {
   assert.equal(r.data.maxPerSlot, 8);
 });
 
-test('14. 修改预约成功路径：改日期/时段正常返回 200', async () => {
+test('14. 已过/近2小时时段：可用性标记 tooLate 且预约被拒', async () => {
+  // 今天的第一个时段：若当前时间已过其 cutoff（开始前2小时），应标记 tooLate
+  const now = new Date();
+  const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+  const av = await api('GET', `/api/availability?date=${today}`);
+  // 找出今天所有 tooLate 的时段（晚上测试时上午时段必过）
+  const tooLate = av.data.slots.filter(s => s.tooLate);
+  if (tooLate.length > 0) {
+    // 尝试预约已截止时段 → 必须拒绝
+    const r = await api('POST', '/api/appointments', { name: '截止测试', phone: '13814140001', date: today, timeSlot: tooLate[0].label });
+    assert.equal(r.status, 400);
+    assert.match(r.data.error, /2小时/);
+  }
+});
+
+test('15. 修改预约成功路径：改日期/时段正常返回 200', async () => {
   const { date, slot } = await findFreeSlot();
   const bk = await api('POST', '/api/appointments', { name: '改约测试', phone: '13812120001', date, timeSlot: slot });
   assert.equal(bk.status, 200);

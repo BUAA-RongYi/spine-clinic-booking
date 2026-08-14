@@ -270,6 +270,14 @@ async function renderSlots(dateStr) {
         <span class="slot-time">${slot.label}</span>
         <span class="slot-remaining">${ICON.ban}<span class="num">已屏蔽</span></span>
       `;
+    } else if (slot.tooLate) {
+      // 2-hour rule: not "full" — show deadline hint, click gives the reason
+      div.className = 'slot-item too-late';
+      div.innerHTML = `
+        <span class="slot-time">${slot.label}</span>
+        <span class="slot-remaining"><span class="num">已截止</span></span>
+      `;
+      div.addEventListener('click', () => toast('预约需在时段开始前2小时完成', 'info'));
     } else if (slot.full) {
       div.className = 'slot-item full';
       div.innerHTML = `

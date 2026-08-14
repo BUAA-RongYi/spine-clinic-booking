@@ -328,6 +328,11 @@ app.get('/api/availability', (req, res) => {
       return { label: s.label, remaining: 0, full: true, blocked: true };
     }
 
+    // 2-hour rule: slots starting within 2h (or already started) are unbookable
+    if (!canModifyOrCancel(date, s.label)) {
+      return { label: s.label, remaining: 0, full: true, tooLate: true };
+    }
+
     const booked = countMap[s.label] || 0;
     return {
       label: s.label,
@@ -402,6 +407,7 @@ app.get('/api/availability/month', (req, res) => {
       const slot = TIME_SLOTS[i];
       const isMorning = i <= 2;
       if ((isMorning && isMorningB) || (!isMorning && isAfternoonB)) continue;
+      if (!canModifyOrCancel(dateStr, slot.label)) continue; // 2-hour rule
       const booked = dateSlots[slot.label] || 0;
       totalRemaining += Math.max(0, MAX_PER_SLOT - booked);
     }
@@ -439,6 +445,11 @@ app.post('/api/appointments', async (req, res) => {
   }
   const slot = TIME_SLOTS.find((s) => s.label === timeSlot);
   if (!slot) return res.status(400).json({ error: '无效的时间段' });
+
+  // 2-hour rule also applies to CREATING a booking
+  if (!canModifyOrCancel(date, timeSlot)) {
+    return res.status(400).json({ error: '预约需在时段开始前2小时完成' });
+  }
 
   // P0-1: check + insert as one atomic block
   const result = await withBookingLock(async () => {
