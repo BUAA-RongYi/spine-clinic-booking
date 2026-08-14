@@ -134,23 +134,33 @@ function enqueueWrite(fn) {
  *  interleaved, so a capacity check sees the result of every prior insert. */
 let bookingLock = Promise.resolve();
 function withBookingLock(fn) {
-  const run = bookingLock.then(fn);
-  bookingLock = run.catch(() => {}); // never break the chain
+  const run = bookingLock.then(fn).catch((e) => {
+    // never break the chain; surface the failure to the caller
+    console.error('[严重] 锁内操作异常:', e.message);
+    return { status: 500, body: { error: '系统繁忙，请稍后重试' } };
+  });
+  bookingLock = run.catch(() => {}); // chain continues regardless
   return run;
 }
 
-/** P0-1: persist and report success; caller rolls back on false */
+/** P0-1: persist and report success; caller rolls back on false.
+ *  Note: enqueueWrite() swallows errors internally (to keep the queue alive),
+ *  so the failure must be captured INSIDE the queued function. */
 async function persistAndCheck() {
-  try {
-    await enqueueWrite(() => persistDB());
-    return true;
-  } catch (e) {
-    console.error('[严重] 落盘失败:', e.message);
-    return false;
-  }
+  let ok = false;
+  await enqueueWrite(() => {
+    try {
+      persistDB();
+      ok = true;
+    } catch (e) {
+      console.error('[严重] 落盘失败:', e.message);
+    }
+  });
+  return ok;
 }
 
-/** P2-5: record admin action to persistent audit table */
+/** P2-5: record admin action to persistent audit table.
+ *  Runs inside the caller's bookingLock (already persisted by persistAndCheck). */
 function logAdminAction(action, detail) {
   try {
     db.run('INSERT INTO admin_logs (action, detail, created_at) VALUES (?, ?, ?)',
@@ -522,54 +532,55 @@ app.put('/api/appointments/:id', async (req, res) => {
   const id = parseInt(req.params.id, 10);
   const { date, timeSlot, name, phone } = req.body;
 
-  const stmt = db.prepare('SELECT * FROM appointments WHERE id = ?');
-  stmt.bind([id]);
-  if (!stmt.step()) { stmt.free(); return res.status(404).json({ error: '预约记录不存在' }); }
-  const existing = stmt.getAsObject();
-  stmt.free();
-
-  // R1: identity check — phone must match the original booking
-  if (!phone || phone !== existing.phone) {
-    return res.status(403).json({ error: '手机号与预约记录不符，无法修改' });
-  }
-
-  if (!canModifyOrCancel(existing.appt_date, existing.time_slot)) {
-    return res.status(400).json({ error: '已超过修改截止时间（预约时间前2小时），无法修改' });
-  }
-
-  // Phone is the identity credential, not changeable here
-  const newDate = date || existing.appt_date;
-  const newSlot = timeSlot || existing.time_slot;
-  const newName = name || existing.name;
-  const newPhone = existing.phone;
-
-  // S3: the TARGET slot must also satisfy the 2-hour rule
-  if (!canModifyOrCancel(newDate, newSlot)) {
-    return res.status(400).json({ error: '目标时段距开始不足2小时，无法修改到该时段' });
-  }
-
+  // Input validation that doesn't depend on DB state
   const { min, max } = getDateRange();
-  if (newDate < min || newDate > max) {
+  if (date && (date < min || date > max)) {
     return res.status(400).json({ error: '只能预约今天起30天内的日期' });
   }
-  if (!TIME_SLOTS.find((s) => s.label === newSlot)) {
+  if (timeSlot && !TIME_SLOTS.find((s) => s.label === timeSlot)) {
     return res.status(400).json({ error: '无效的时间段' });
   }
-  // Name validation (same as booking)
-  const trimmedName = String(newName).trim();
-  if (trimmedName.length < 2 || trimmedName.length > 20) {
-    return res.status(400).json({ error: '姓名长度需为2-20个字符' });
-  }
-  if (/[<>]/.test(trimmedName)) {
-    return res.status(400).json({ error: '姓名包含非法字符' });
+  const trimmedName = name ? String(name).trim() : '';
+  if (name !== undefined) {
+    if (trimmedName.length < 2 || trimmedName.length > 20) {
+      return res.status(400).json({ error: '姓名长度需为2-20个字符' });
+    }
+    if (/[<>]/.test(trimmedName)) {
+      return res.status(400).json({ error: '姓名包含非法字符' });
+    }
   }
 
-  const dateChanged = newDate !== existing.appt_date;
-  const slotChanged = newSlot !== existing.time_slot;
-  const nameChanged = trimmedName !== existing.name;
-
-  // P0-1: capacity-checked write as one atomic block
+  // P0-1: read existing INSIDE the lock so concurrent edits of the same id
+  // see each other's writes (fixes stale-snapshot overwrite)
   const result = await withBookingLock(async () => {
+    const stmt = db.prepare('SELECT * FROM appointments WHERE id = ?');
+    stmt.bind([id]);
+    if (!stmt.step()) { stmt.free(); return { status: 404, body: { error: '预约记录不存在' } }; }
+    const existing = stmt.getAsObject();
+    stmt.free();
+
+    // R1: identity check — phone must match the original booking
+    if (!phone || phone !== existing.phone) {
+      return { status: 403, body: { error: '手机号与预约记录不符，无法修改' } };
+    }
+
+    if (!canModifyOrCancel(existing.appt_date, existing.time_slot)) {
+      return { status: 400, body: { error: '已超过修改截止时间（预约时间前2小时），无法修改' } };
+    }
+
+    // Phone is the identity credential, not changeable here
+    const newDate = date || existing.appt_date;
+    const newSlot = timeSlot || existing.time_slot;
+    const newName = trimmedName || existing.name;
+
+    // S3: the TARGET slot must also satisfy the 2-hour rule
+    if (!canModifyOrCancel(newDate, newSlot)) {
+      return { status: 400, body: { error: '目标时段距开始不足2小时，无法修改到该时段' } };
+    }
+
+    const dateChanged = newDate !== existing.appt_date;
+    const slotChanged = newSlot !== existing.time_slot;
+    const nameChanged = newName !== existing.name;
     // Capacity + blocked check — only needed when date/slot changed
     if (dateChanged || slotChanged) {
       const cStmt = db.prepare("SELECT COUNT(*) as cnt FROM appointments WHERE appt_date = ? AND time_slot = ? AND id != ? AND status != '未到场'");
@@ -663,12 +674,19 @@ app.delete('/api/admin/appointments/:id', requireAdmin, async (req, res) => {
   const existing = stmt.getAsObject();
   stmt.free();
 
-  db.run('DELETE FROM appointments WHERE id = ?', [id]);
-  await enqueueWrite(() => persistDB());
+  // P0-1: delete + persist atomic, restore on failure
+  const result = await withBookingLock(async () => {
+    db.run('DELETE FROM appointments WHERE id = ?', [id]);
+    if (!(await persistAndCheck())) {
+      db.run('INSERT INTO appointments (id, name, phone, appt_date, time_slot, status, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+        [id, existing.name, existing.phone, existing.appt_date, existing.time_slot, existing.status, existing.created_at, existing.updated_at]);
+      return { status: 500, body: { error: '系统繁忙，请稍后重试' } };
+    }
+    logAdminAction('删除预约', `#${id} ${existing.appt_date} ${existing.time_slot} ${existing.name}`);
+    return { status: 200, body: { success: true, message: '预约记录已删除' } };
+  });
 
-  logAdminAction('删除预约', `#${id} ${existing.appt_date} ${existing.time_slot} ${existing.name}`);
-
-  res.json({ success: true, message: '预约记录已删除' });
+  res.status(result.status).json(result.body);
 });
 
 // GET /api/admin/appointments?date=YYYY-MM-DD | ?month=YYYY-MM
@@ -714,11 +732,19 @@ app.put('/api/admin/appointments/:id/status', requireAdmin, async (req, res) => 
   const existing = stmt.getAsObject();
   stmt.free();
 
-  db.run('UPDATE appointments SET status = ?, updated_at = ? WHERE id = ?', [status, nowStr(), id]);
-  // M5: wait for disk persist before responding
-  await enqueueWrite(() => persistDB());
-  logAdminAction('标记状态', `#${id} ${existing.appt_date} ${existing.time_slot} ${existing.name} → ${status}`);
-  res.json({ success: true, message: `已标记为"${status}"`, status });
+  // P0-1: status update + persist atomic, roll back on failure
+  const result = await withBookingLock(async () => {
+    db.run('UPDATE appointments SET status = ?, updated_at = ? WHERE id = ?', [status, nowStr(), id]);
+    if (!(await persistAndCheck())) {
+      db.run('UPDATE appointments SET status = ?, updated_at = ? WHERE id = ?',
+        [existing.status, existing.updated_at, id]);
+      return { status: 500, body: { error: '系统繁忙，请稍后重试' } };
+    }
+    logAdminAction('标记状态', `#${id} ${existing.appt_date} ${existing.time_slot} ${existing.name} → ${status}`);
+    return { status: 200, body: { success: true, message: `已标记为"${status}"`, status } };
+  });
+
+  res.status(result.status).json(result.body);
 });
 
 // GET /api/admin/patient-stats?name=&start=&end=
