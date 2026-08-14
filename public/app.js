@@ -334,7 +334,7 @@ document.getElementById('btn-submit').addEventListener('click', async () => {
   btn.textContent = '提交中...';
 
   try {
-    await api('POST', '/api/appointments', {
+    const data = await api('POST', '/api/appointments', {
       name,
       phone,
       date: state.selectedDate,
