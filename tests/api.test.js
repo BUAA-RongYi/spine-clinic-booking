@@ -187,6 +187,42 @@ test('10. 配置接口返回时段与规则', async () => {
   assert.equal(r.data.maxPerSlot, 8);
 });
 
+test('14. 修改预约成功路径：改日期/时段正常返回 200', async () => {
+  const { date, slot } = await findFreeSlot();
+  const bk = await api('POST', '/api/appointments', { name: '改约测试', phone: '13812120001', date, timeSlot: slot });
+  assert.equal(bk.status, 200);
+  const id = bk.data.appointment.id;
+  // 改到另一个可用时段（同一天换时段）
+  const other = (await api('GET', `/api/availability?date=${date}`)).data.slots.find(s => !s.full && !s.blocked && s.label !== slot);
+  if (other) {
+    const r = await api('PUT', `/api/appointments/${id}`, { phone: '13812120001', date, timeSlot: other.label, name: '改约测试' });
+    assert.equal(r.status, 200, `改约失败: ${r.data.error || ''}`);
+    // 验证时段已更新
+    const q = await api('GET', `/api/appointments?phone=13812120001&name=改约测试`);
+    const updated = q.data.appointments.find(a => a.id === id);
+    assert.equal(updated.time_slot, other.label);
+  }
+  await api('DELETE', `/api/appointments/${id}`, { phone: '13812120001' });
+});
+
+test('15. 修改预约省略 name 时保留原名', async () => {
+  const { date, slot } = await findFreeSlot();
+  const bk = await api('POST', '/api/appointments', { name: '保留名测试', phone: '13812120002', date, timeSlot: slot });
+  assert.equal(bk.status, 200);
+  const id = bk.data.appointment.id;
+  // 只改时段，不传 name
+  const other = (await api('GET', `/api/availability?date=${date}`)).data.slots.find(s => !s.full && !s.blocked && s.label !== slot);
+  if (other) {
+    const r = await api('PUT', `/api/appointments/${id}`, { phone: '13812120002', date, timeSlot: other.label });
+    assert.equal(r.status, 200, `省略name改约失败: ${r.data.error || ''}`);
+    const q = await api('GET', `/api/appointments?phone=13812120002&name=保留名测试`);
+    const updated = q.data.appointments.find(a => a.id === id);
+    assert.equal(updated.name, '保留名测试', '姓名被清空!');
+    assert.equal(updated.time_slot, other.label);
+  }
+  await api('DELETE', `/api/appointments/${id}`, { phone: '13812120002' });
+});
+
 test('11. 并发抢号不超卖：10并发打满时段，成功数 ≤ 剩余名额', async () => {
   const { date, slot } = await findFreeSlot();
   const remaining = (await api('GET', `/api/availability?date=${date}`)).data.slots.find(s => s.label === slot).remaining;

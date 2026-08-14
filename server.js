@@ -572,6 +572,7 @@ app.put('/api/appointments/:id', async (req, res) => {
     const newDate = date || existing.appt_date;
     const newSlot = timeSlot || existing.time_slot;
     const newName = trimmedName || existing.name;
+    const newPhone = existing.phone;
 
     // S3: the TARGET slot must also satisfy the 2-hour rule
     if (!canModifyOrCancel(newDate, newSlot)) {
@@ -600,8 +601,8 @@ app.put('/api/appointments/:id', async (req, res) => {
     // Duplicate name check — when date/slot/name changed
     if (dateChanged || slotChanged || nameChanged) {
       const dStmt = db.prepare('SELECT id FROM appointments WHERE appt_date = ? AND time_slot = ? AND name = ? AND id != ?');
-      dStmt.bind([newDate, newSlot, trimmedName, id]);
-      if (dStmt.step()) { dStmt.free(); return { status: 400, body: { error: `"${trimmedName}" 已存在于目标时间段` } }; }
+      dStmt.bind([newDate, newSlot, newName, id]);
+      if (dStmt.step()) { dStmt.free(); return { status: 400, body: { error: `"${newName}" 已存在于目标时间段` } }; }
       dStmt.free();
     }
 
@@ -615,7 +616,7 @@ app.put('/api/appointments/:id', async (req, res) => {
 
     const ts = nowStr();
     db.run('UPDATE appointments SET appt_date = ?, time_slot = ?, name = ?, updated_at = ? WHERE id = ?',
-      [newDate, newSlot, trimmedName, ts, id]);
+      [newDate, newSlot, newName, ts, id]);
 
     // P0-1: persist; roll back on failure
     if (!(await persistAndCheck())) {
