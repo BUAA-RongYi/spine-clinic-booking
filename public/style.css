@@ -628,9 +628,15 @@ select:focus-visible {
   background: #fff; border-radius: var(--radius-lg);
   padding: 16px; box-shadow: var(--shadow); margin-bottom: 12px;
 }
-.admin-table-wrap { margin-top: 8px; }
+.admin-table-wrap {
+  margin-top: 8px;
+  overflow-x: auto;                       /* 小屏横向滚动 */
+  -webkit-overflow-scrolling: touch;
+  border-radius: var(--radius);
+}
 .admin-table {
-  width: 100%; border-collapse: collapse;
+  width: 100%; min-width: 430px;           /* 列多时保证不挤压 */
+  border-collapse: collapse;
   background: #fff; border-radius: var(--radius);
   overflow: hidden; box-shadow: var(--shadow);
   font-size: 14px;
@@ -894,6 +900,12 @@ select:focus-visible {
   color: var(--gray-500);
   border-bottom: 1px solid rgba(13, 148, 136, .12);
 }
+/* 图标与文字在同一 flex 行内居中，避免 svg 基线偏移 */
+.success-row span {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
 .success-row:last-child { border-bottom: none; }
 .success-row strong {
   color: var(--gray-800);
@@ -921,6 +933,25 @@ select:focus-visible {
   width: 100%;
   margin-top: 12px;
 }
+
+/* ── Loading（查询中/加载中） ─────────────────────────────────────────────── */
+.loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 20px;
+  color: var(--gray-500);
+  font-size: 14px;
+}
+.spinner {
+  width: 16px; height: 16px;
+  border: 2px solid var(--gray-200);
+  border-top-color: var(--primary);
+  border-radius: 50%;
+  animation: spin .8s linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
 
 /* ── Toast ────────────────────────────────────────────────────────────────── */
 .toast {
