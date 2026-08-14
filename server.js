@@ -36,8 +36,8 @@ app.get('/api/config', (req, res) => {
   res.json({
     slots: TIME_SLOTS.map(s => ({ label: s.label, session: s.session })),
     maxPerSlot: MAX_PER_SLOT,
-    cancelWindowHours: 2,
-    bookingWindowDays: 30,
+    cancelWindowHours: CANCEL_WINDOW_HOURS,
+    bookingWindowDays: BOOKING_WINDOW_DAYS,
   });
 });
 
@@ -51,10 +51,14 @@ const TIME_SLOTS = [
 ];
 
 const MAX_PER_SLOT = 8;
+// P2-6: single-source business constants (mirrored in /api/config)
+const CANCEL_WINDOW_HOURS = 2;
+const BOOKING_WINDOW_DAYS = 30;
 // M3: password must come from environment — no hardcoded default
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD;
-// M4: token with 12-hour expiry
-let adminSession = null; // { token, expiresAt }
+// M4+P1-3: session map — multiple admins can be logged in simultaneously
+const TOKEN_TTL = 12 * 60 * 60 * 1000; // 12 hours
+const adminSessions = new Map(); // token -> expiresAt
 
 // ── Login Rate Limiter (M3) ───────────────────────────────────────────────────
 const loginAttempts = new Map(); // ip -> { count, lockedUntil }
@@ -88,20 +92,34 @@ function recordLoginSuccess(ip) {
 function requireAdmin(req, res, next) {
   const auth = req.headers.authorization;
   // M4: expired session
-  if (!adminSession || adminSession.expiresAt < Date.now()) {
-    return res.status(401).json({ error: '登录已过期，请重新登录' });
-  }
-  if (!auth || !auth.startsWith('Bearer ') || auth.slice(7) !== adminSession.token) {
+  if (!auth || !auth.startsWith('Bearer ')) {
     return res.status(401).json({ error: '未授权，请先登录管理后台' });
   }
+  const token = auth.slice(7);
+  const expiresAt = adminSessions.get(token);
+  if (!expiresAt || expiresAt < Date.now()) {
+    adminSessions.delete(token); // purge expired
+    return res.status(401).json({ error: '登录已过期，请重新登录' });
+  }
   next();
+}
+
+/** P1-3: purge expired tokens periodically (called on each login) */
+function purgeExpiredSessions() {
+  const now = Date.now();
+  for (const [token, expiresAt] of adminSessions) {
+    if (expiresAt < now) adminSessions.delete(token);
+  }
 }
 
 // ── Database ──────────────────────────────────────────────────────────────────
 let db;
 
+// P0-1: atomic persist — write to temp file then rename (rename is atomic on same fs)
 function persistDB() {
-  try { fs.writeFileSync(DB_PATH, Buffer.from(db.export())); } catch (e) { console.error('DB save error:', e.message); }
+  const tmp = DB_PATH + '.tmp';
+  fs.writeFileSync(tmp, Buffer.from(db.export()));
+  fs.renameSync(tmp, DB_PATH);
 }
 
 /** Write queue — sequentialize writes to avoid concurrent save corruption */
@@ -109,6 +127,38 @@ let writeQueue = Promise.resolve();
 function enqueueWrite(fn) {
   writeQueue = writeQueue.then(fn).catch((e) => console.error('DB write error:', e));
   return writeQueue;
+}
+
+/** P0-1: business-level mutex — serializes "check + mutate" blocks.
+ *  sql.js is single-threaded: synchronous code inside the lock cannot be
+ *  interleaved, so a capacity check sees the result of every prior insert. */
+let bookingLock = Promise.resolve();
+function withBookingLock(fn) {
+  const run = bookingLock.then(fn);
+  bookingLock = run.catch(() => {}); // never break the chain
+  return run;
+}
+
+/** P0-1: persist and report success; caller rolls back on false */
+async function persistAndCheck() {
+  try {
+    await enqueueWrite(() => persistDB());
+    return true;
+  } catch (e) {
+    console.error('[严重] 落盘失败:', e.message);
+    return false;
+  }
+}
+
+/** P2-5: record admin action to persistent audit table */
+function logAdminAction(action, detail) {
+  try {
+    db.run('INSERT INTO admin_logs (action, detail, created_at) VALUES (?, ?, ?)',
+      [action, detail, nowStr()]);
+    console.log(`[操作] ${action} ${detail}`);
+  } catch (e) {
+    console.error('审计写入失败:', e.message);
+  }
 }
 
 async function initDB() {
@@ -142,7 +192,25 @@ async function initDB() {
   db.run('CREATE INDEX IF NOT EXISTS idx_appt_date_slot ON appointments(appt_date, time_slot)');
   db.run('CREATE INDEX IF NOT EXISTS idx_appt_phone ON appointments(phone)');
   db.run('CREATE INDEX IF NOT EXISTS idx_block_date ON blocked_dates(block_date)');
+  // P2-5: admin audit trail — survives PM2 log rotation
+  db.run(`CREATE TABLE IF NOT EXISTS admin_logs (
+    id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    action     TEXT NOT NULL,
+    detail     TEXT NOT NULL,
+    created_at TEXT NOT NULL
+  )`);
   persistDB();
+
+  // P0-2: startup consistency check — a leftover .tmp file means a persist
+  // was interrupted between writeFileSync and rename (crash/power loss).
+  // sqlite_sequence cannot be used for this: seq does NOT roll back on DELETE.
+  const tmpPath = DB_PATH + '.tmp';
+  if (fs.existsSync(tmpPath)) {
+    console.warn('[警告] 检测到数据库临时文件残留: ' + tmpPath);
+    console.warn('       上次写入可能被中断。当前加载的是最近一次完整落盘的数据。');
+    console.warn('       如需恢复请使用: /opt/backups/ 或 Gitee 仓库中的备份');
+    fs.unlinkSync(tmpPath); // stale tmp is never valid data
+  }
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -172,14 +240,14 @@ function canModifyOrCancel(dateStr, slotLabel) {
   const key = toKey(slotLabel);
   const slotStart = slotStartDateTime(dateStr, key);
   const now = new Date();
-  const twoHoursBefore = new Date(slotStart.getTime() - 2 * 60 * 60 * 1000);
-  return now < twoHoursBefore;
+  const cutoff = new Date(slotStart.getTime() - CANCEL_WINDOW_HOURS * 60 * 60 * 1000);
+  return now < cutoff;
 }
 
 function getDateRange() {
   const today = new Date();
   const max = new Date(today);
-  max.setDate(max.getDate() + 30);
+  max.setDate(max.getDate() + BOOKING_WINDOW_DAYS);
   return { min: ymd(today), max: ymd(max) };
 }
 
@@ -203,8 +271,9 @@ app.post('/api/admin/verify', loginRateLimit, (req, res) => {
   }
   recordLoginSuccess(ip);
   const token = Buffer.from(`admin_${Date.now()}_${Math.random()}`).toString('base64');
-  // M4: 12-hour session
-  adminSession = { token, expiresAt: Date.now() + 12 * 60 * 60 * 1000 };
+  // M4+P1-3: 12-hour session, multiple concurrent sessions supported
+  purgeExpiredSessions();
+  adminSessions.set(token, Date.now() + TOKEN_TTL);
   res.json({ success: true, token });
 });
 
@@ -361,63 +430,68 @@ app.post('/api/appointments', async (req, res) => {
   const slot = TIME_SLOTS.find((s) => s.label === timeSlot);
   if (!slot) return res.status(400).json({ error: '无效的时间段' });
 
-  // Check capacity (exclude no-shows)
-  const cntRow = db.prepare("SELECT COUNT(*) as cnt FROM appointments WHERE appt_date = ? AND time_slot = ? AND status != '未到场'");
-  cntRow.bind([date, timeSlot]);
-  cntRow.step();
-  const bookedCount = cntRow.getAsObject().cnt;
-  cntRow.free();
+  // P0-1: check + insert as one atomic block
+  const result = await withBookingLock(async () => {
+    // Check capacity (exclude no-shows)
+    const cntRow = db.prepare("SELECT COUNT(*) as cnt FROM appointments WHERE appt_date = ? AND time_slot = ? AND status != '未到场'");
+    cntRow.bind([date, timeSlot]);
+    cntRow.step();
+    const bookedCount = cntRow.getAsObject().cnt;
+    cntRow.free();
 
-  if (bookedCount >= MAX_PER_SLOT) {
-    return res.status(400).json({ error: '该时间段已约满，请选择其他时间段' });
-  }
+    if (bookedCount >= MAX_PER_SLOT) {
+      return { status: 400, body: { error: '该时间段已约满，请选择其他时间段' } };
+    }
 
-  // Check duplicate name
-  const dupRow = db.prepare('SELECT id FROM appointments WHERE appt_date = ? AND time_slot = ? AND name = ?');
-  dupRow.bind([date, timeSlot, cleanName]);
-  const dupExists = dupRow.step();
-  dupRow.free();
+    // Check duplicate name
+    const dupRow = db.prepare('SELECT id FROM appointments WHERE appt_date = ? AND time_slot = ? AND name = ?');
+    dupRow.bind([date, timeSlot, cleanName]);
+    const dupExists = dupRow.step();
+    dupRow.free();
 
-  if (dupExists) {
-    return res.status(400).json({ error: `"${cleanName}" 已预约了该日期的 ${timeSlot} 时间段，请勿重复预约` });
-  }
+    if (dupExists) {
+      return { status: 400, body: { error: `"${cleanName}" 已预约了该日期的 ${timeSlot} 时间段，请勿重复预约` } };
+    }
 
-  // Check phone uniqueness per day (one phone = one slot per day)
-  const phoneRow = db.prepare('SELECT time_slot FROM appointments WHERE appt_date = ? AND phone = ?');
-  phoneRow.bind([date, phone]);
-  if (phoneRow.step()) {
-    const existing = phoneRow.getAsObject();
+    // Check phone uniqueness per day (one phone = one slot per day)
+    const phoneRow = db.prepare('SELECT time_slot FROM appointments WHERE appt_date = ? AND phone = ?');
+    phoneRow.bind([date, phone]);
+    if (phoneRow.step()) {
+      const existing = phoneRow.getAsObject();
+      phoneRow.free();
+      return { status: 400, body: { error: `该手机号在${date}已预约了 ${existing.time_slot}，一天只能预约一个时间段` } };
+    }
     phoneRow.free();
-    return res.status(400).json({
-      error: `该手机号在${date}已预约了 ${existing.time_slot}，一天只能预约一个时间段`
-    });
-  }
-  phoneRow.free();
 
-  // Check if date/session is blocked
-  const session = TIME_SLOTS.find(s => s.label === timeSlot).session;
-  const blockCheck = db.prepare('SELECT id FROM blocked_dates WHERE block_date = ? AND session IN (?, ?)');
-  blockCheck.bind([date, session, 'all_day']);
-  if (blockCheck.step()) {
+    // Check if date/session is blocked
+    const session = TIME_SLOTS.find(s => s.label === timeSlot).session;
+    const blockCheck = db.prepare('SELECT id FROM blocked_dates WHERE block_date = ? AND session IN (?, ?)');
+    blockCheck.bind([date, session, 'all_day']);
+    if (blockCheck.step()) {
+      blockCheck.free();
+      return { status: 400, body: { error: '该时段已被管理员关闭，无法预约' } };
+    }
     blockCheck.free();
-    return res.status(400).json({ error: '该时段已被管理员关闭，无法预约' });
-  }
-  blockCheck.free();
 
-  const ts = nowStr();
-  db.run('INSERT INTO appointments (name, phone, appt_date, time_slot, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)',
-    [cleanName, phone, date, timeSlot, ts, ts]);
-  const idStmt = db.prepare('SELECT last_insert_rowid() as id');
-  idStmt.step();
-  const id = idStmt.getAsObject().id;
-  idStmt.free();
+    const ts = nowStr();
+    db.run('INSERT INTO appointments (name, phone, appt_date, time_slot, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)',
+      [cleanName, phone, date, timeSlot, ts, ts]);
+    const idStmt = db.prepare('SELECT last_insert_rowid() as id');
+    idStmt.step();
+    const id = idStmt.getAsObject().id;
+    idStmt.free();
 
-  // M5: wait for disk persist before responding
-  await enqueueWrite(() => persistDB());
+    // P0-1: persist; roll back in-memory insert on failure
+    if (!(await persistAndCheck())) {
+      db.run('DELETE FROM appointments WHERE id = ?', [id]);
+      return { status: 500, body: { error: '系统繁忙，请稍后重试' } };
+    }
 
-  console.log(`[操作] 新预约 #${id} ${cleanName} ${phone} ${date} ${timeSlot}`);
+    console.log(`[操作] 新预约 #${id} ${cleanName} ${phone} ${date} ${timeSlot}`);
+    return { status: 200, body: { success: true, message: '预约成功！', appointment: { id, name: cleanName, phone, date, timeSlot } } };
+  });
 
-  res.json({ success: true, message: '预约成功！', appointment: { id, name: cleanName, phone, date, timeSlot } });
+  res.status(result.status).json(result.body);
 });
 
 // GET /api/appointments?phone=xxx&name=xxx
@@ -494,46 +568,55 @@ app.put('/api/appointments/:id', async (req, res) => {
   const slotChanged = newSlot !== existing.time_slot;
   const nameChanged = trimmedName !== existing.name;
 
-  // Capacity + blocked check — only needed when date/slot changed
-  if (dateChanged || slotChanged) {
-    const cStmt = db.prepare("SELECT COUNT(*) as cnt FROM appointments WHERE appt_date = ? AND time_slot = ? AND id != ? AND status != '未到场'");
-    cStmt.bind([newDate, newSlot, id]);
-    cStmt.step();
-    if (cStmt.getAsObject().cnt >= MAX_PER_SLOT) { cStmt.free(); return res.status(400).json({ error: '目标时间段已约满' }); }
-    cStmt.free();
+  // P0-1: capacity-checked write as one atomic block
+  const result = await withBookingLock(async () => {
+    // Capacity + blocked check — only needed when date/slot changed
+    if (dateChanged || slotChanged) {
+      const cStmt = db.prepare("SELECT COUNT(*) as cnt FROM appointments WHERE appt_date = ? AND time_slot = ? AND id != ? AND status != '未到场'");
+      cStmt.bind([newDate, newSlot, id]);
+      cStmt.step();
+      if (cStmt.getAsObject().cnt >= MAX_PER_SLOT) { cStmt.free(); return { status: 400, body: { error: '目标时间段已约满' } }; }
+      cStmt.free();
 
-    // Check target date/session not blocked
-    const slotSess = TIME_SLOTS.find(s => s.label === newSlot).session;
-    const bStmt = db.prepare('SELECT id FROM blocked_dates WHERE block_date = ? AND session IN (?, ?)');
-    bStmt.bind([newDate, slotSess, 'all_day']);
-    if (bStmt.step()) { bStmt.free(); return res.status(400).json({ error: '目标日期/时段已被管理员屏蔽，无法修改' }); }
-    bStmt.free();
-  }
+      // Check target date/session not blocked
+      const slotSess = TIME_SLOTS.find(s => s.label === newSlot).session;
+      const bStmt = db.prepare('SELECT id FROM blocked_dates WHERE block_date = ? AND session IN (?, ?)');
+      bStmt.bind([newDate, slotSess, 'all_day']);
+      if (bStmt.step()) { bStmt.free(); return { status: 400, body: { error: '目标日期/时段已被管理员屏蔽，无法修改' } }; }
+      bStmt.free();
+    }
 
-  // Duplicate name check — when date/slot/name changed
-  if (dateChanged || slotChanged || nameChanged) {
-    const dStmt = db.prepare('SELECT id FROM appointments WHERE appt_date = ? AND time_slot = ? AND name = ? AND id != ?');
-    dStmt.bind([newDate, newSlot, trimmedName, id]);
-    if (dStmt.step()) { dStmt.free(); return res.status(400).json({ error: `"${trimmedName}" 已存在于目标时间段` }); }
-    dStmt.free();
-  }
+    // Duplicate name check — when date/slot/name changed
+    if (dateChanged || slotChanged || nameChanged) {
+      const dStmt = db.prepare('SELECT id FROM appointments WHERE appt_date = ? AND time_slot = ? AND name = ? AND id != ?');
+      dStmt.bind([newDate, newSlot, trimmedName, id]);
+      if (dStmt.step()) { dStmt.free(); return { status: 400, body: { error: `"${trimmedName}" 已存在于目标时间段` } }; }
+      dStmt.free();
+    }
 
-  // Phone-per-day check — when date changed (phone cannot change)
-  if (dateChanged) {
-    const pStmt = db.prepare('SELECT id FROM appointments WHERE appt_date = ? AND phone = ? AND id != ?');
-    pStmt.bind([newDate, newPhone, id]);
-    if (pStmt.step()) { pStmt.free(); return res.status(400).json({ error: '该手机号当天已预约过，一天只能预约一个时间段' }); }
-    pStmt.free();
-  }
+    // Phone-per-day check — when date changed (phone cannot change)
+    if (dateChanged) {
+      const pStmt = db.prepare('SELECT id FROM appointments WHERE appt_date = ? AND phone = ? AND id != ?');
+      pStmt.bind([newDate, newPhone, id]);
+      if (pStmt.step()) { pStmt.free(); return { status: 400, body: { error: '该手机号当天已预约过，一天只能预约一个时间段' } }; }
+      pStmt.free();
+    }
 
-  const ts = nowStr();
-  db.run('UPDATE appointments SET appt_date = ?, time_slot = ?, name = ?, updated_at = ? WHERE id = ?',
-    [newDate, newSlot, trimmedName, ts, id]);
+    const ts = nowStr();
+    db.run('UPDATE appointments SET appt_date = ?, time_slot = ?, name = ?, updated_at = ? WHERE id = ?',
+      [newDate, newSlot, trimmedName, ts, id]);
 
-  // M5: wait for disk persist before responding
-  await enqueueWrite(() => persistDB());
+    // P0-1: persist; roll back on failure
+    if (!(await persistAndCheck())) {
+      db.run('UPDATE appointments SET appt_date = ?, time_slot = ?, name = ?, updated_at = ? WHERE id = ?',
+        [existing.appt_date, existing.time_slot, existing.name, existing.updated_at, id]);
+      return { status: 500, body: { error: '系统繁忙，请稍后重试' } };
+    }
 
-  res.json({ success: true, message: '预约信息已更新' });
+    return { status: 200, body: { success: true, message: '预约信息已更新' } };
+  });
+
+  res.status(result.status).json(result.body);
 });
 
 // DELETE /api/appointments/:id
@@ -556,11 +639,18 @@ app.delete('/api/appointments/:id', async (req, res) => {
     return res.status(400).json({ error: '已超过取消截止时间（预约时间前2小时），无法取消' });
   }
 
-  db.run('DELETE FROM appointments WHERE id = ?', [id]);
-  // M5: wait for disk persist before responding
-  await enqueueWrite(() => persistDB());
+  // P0-1: delete + persist as atomic block, restore on failure
+  const result = await withBookingLock(async () => {
+    db.run('DELETE FROM appointments WHERE id = ?', [id]);
+    if (!(await persistAndCheck())) {
+      db.run('INSERT INTO appointments (id, name, phone, appt_date, time_slot, status, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+        [id, existing.name, existing.phone, existing.appt_date, existing.time_slot, existing.status, existing.created_at, existing.updated_at]);
+      return { status: 500, body: { error: '系统繁忙，请稍后重试' } };
+    }
+    return { status: 200, body: { success: true, message: '预约已取消' } };
+  });
 
-  res.json({ success: true, message: '预约已取消' });
+  res.status(result.status).json(result.body);
 });
 
 // DELETE /api/admin/appointments/:id — admin can delete any record (no 2h limit)
@@ -576,7 +666,7 @@ app.delete('/api/admin/appointments/:id', requireAdmin, async (req, res) => {
   db.run('DELETE FROM appointments WHERE id = ?', [id]);
   await enqueueWrite(() => persistDB());
 
-  console.log(`[操作] 管理员删除预约 #${id} (${existing.appt_date} ${existing.time_slot} ${existing.name})`);
+  logAdminAction('删除预约', `#${id} ${existing.appt_date} ${existing.time_slot} ${existing.name}`);
 
   res.json({ success: true, message: '预约记录已删除' });
 });
@@ -592,9 +682,13 @@ app.get('/api/admin/appointments', requireAdmin, (req, res) => {
     while (stmt.step()) rows.push(stmt.getAsObject());
     stmt.free();
   } else if (month && /^\d{4}-\d{2}$/.test(month)) {
-    // S4: month filter (e.g. 2026-08) — avoids loading everything
-    const stmt = db.prepare("SELECT id, name, phone, appt_date, time_slot, status, created_at FROM appointments WHERE appt_date LIKE ? ORDER BY appt_date DESC, time_slot ASC");
-    stmt.bind([`${month}-%`]);
+    // S4+P1-4: month filter via range scan (uses idx_appt_date_slot index)
+    const [y, m] = month.split('-').map(Number);
+    const daysInMonth = new Date(y, m, 0).getDate();
+    const start = `${month}-01`;
+    const end = `${month}-${String(daysInMonth).padStart(2, '0')}`;
+    const stmt = db.prepare("SELECT id, name, phone, appt_date, time_slot, status, created_at FROM appointments WHERE appt_date BETWEEN ? AND ? ORDER BY appt_date DESC, time_slot ASC");
+    stmt.bind([start, end]);
     while (stmt.step()) rows.push(stmt.getAsObject());
     stmt.free();
   } else {
@@ -623,7 +717,7 @@ app.put('/api/admin/appointments/:id/status', requireAdmin, async (req, res) => 
   db.run('UPDATE appointments SET status = ?, updated_at = ? WHERE id = ?', [status, nowStr(), id]);
   // M5: wait for disk persist before responding
   await enqueueWrite(() => persistDB());
-  console.log(`[操作] 管理员标记 #${id} (${existing.appt_date} ${existing.time_slot} ${existing.name}) 状态 → ${status}`);
+  logAdminAction('标记状态', `#${id} ${existing.appt_date} ${existing.time_slot} ${existing.name} → ${status}`);
   res.json({ success: true, message: `已标记为"${status}"`, status });
 });
 
@@ -709,7 +803,7 @@ app.post('/api/admin/blocked-dates', requireAdmin, async (req, res) => {
   db.run('INSERT INTO blocked_dates (block_date, session, created_at) VALUES (?, ?, ?)',
     [date, session, ts]);
   await enqueueWrite(() => persistDB());
-  console.log(`[操作] 管理员屏蔽日期 ${date} ${session}`);
+  logAdminAction('屏蔽日期', `${date} ${session}`);
   res.json({ success: true, message: '屏蔽设置成功' });
 });
 
@@ -722,7 +816,7 @@ app.delete('/api/admin/blocked-dates/:id', requireAdmin, async (req, res) => {
   stmt.free();
   db.run('DELETE FROM blocked_dates WHERE id = ?', [id]);
   await enqueueWrite(() => persistDB());
-  console.log(`[操作] 管理员取消屏蔽 #${id}`);
+  logAdminAction('取消屏蔽', `#${id}`);
   res.json({ success: true, message: '已取消屏蔽' });
 });
 
