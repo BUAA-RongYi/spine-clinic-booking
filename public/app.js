@@ -12,6 +12,17 @@ let TIME_SLOTS = [
   { label: '16:00-17:00', value: '16:00-17:00' },
 ];
 
+// 内联 SVG 图标（V3 主题：替换 emoji，保证跨平台渲染一致）
+const ICON = {
+  cal:   '<svg class="ico-inline" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="16" rx="3"/><path d="M3 10h18M8 3v4M16 3v4"/></svg>',
+  clock: '<svg class="ico-inline" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>',
+  user:  '<svg class="ico-inline" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="8" r="4"/><path d="M4 21c0-4 3.6-6.5 8-6.5s8 2.5 8 6.5"/></svg>',
+  phone: '<svg class="ico-inline" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="7" y="3" width="10" height="18" rx="2.5"/><path d="M11 18h2"/></svg>',
+  edit:  '<svg class="ico-inline" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20h4L19 9l-4-4L4 16v4z"/><path d="M13.5 6.5l4 4"/></svg>',
+  ban:   '<svg class="ico-inline" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M5.6 5.6l12.8 12.8"/></svg>',
+  users: '<svg class="ico-inline" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="9" cy="8" r="3.5"/><path d="M2.5 20c0-3.5 3-5.5 6.5-5.5s6.5 2 6.5 5.5"/><path d="M16 4.6a3.5 3.5 0 0 1 0 6.8M17.5 14.7c2.6.7 4 2.6 4 5.3"/></svg>',
+};
+
 // ── State ────────────────────────────────────────────────────────────────────
 const state = {
   calYear:  new Date().getFullYear(),
@@ -257,7 +268,7 @@ async function renderSlots(dateStr) {
       div.className = 'slot-item blocked';
       div.innerHTML = `
         <span class="slot-time">${slot.label}</span>
-        <span class="slot-remaining">🚫 <span class="num">已屏蔽</span></span>
+        <span class="slot-remaining">${ICON.ban}<span class="num">已屏蔽</span></span>
       `;
     } else if (slot.full) {
       div.className = 'slot-item full';
@@ -393,7 +404,7 @@ async function autoLoadMyAppointments() {
   const u = getSavedUser();
   const list = document.getElementById('myappt-list');
   if (!u.phone || !u.name) {
-    list.innerHTML = '<div class="appt-item" style="text-align:center;color:var(--gray-600);">请先输入姓名和手机号，然后点击"查询预约"</div>';
+    list.innerHTML = `<div class="appt-empty"><span class="appt-empty-icon">${ICON.user}</span>请先输入姓名和手机号，然后点击"查询预约"</div>`;
     return;
   }
   document.getElementById('lookup-name').value = u.name;
@@ -431,7 +442,7 @@ document.getElementById('btn-lookup').addEventListener('click', async () => {
 function renderMyAppointments(appts) {
   const list = document.getElementById('myappt-list');
   if (!appts.length) {
-    list.innerHTML = '<div class="appt-item" style="text-align:center;color:var(--gray-600);">暂无预约记录</div>';
+    list.innerHTML = `<div class="appt-empty"><span class="appt-empty-icon">${ICON.cal}</span>暂无预约记录</div>`;
     return;
   }
 
@@ -439,7 +450,7 @@ function renderMyAppointments(appts) {
     const statusClass = a.isPast ? 'past' : '';
     const actionsHTML = a.isPast ? '' : `
       <div class="appt-actions">
-        ${a.canModify ? `<button class="btn-sm edit" data-id="${a.id}" data-action="modify">✏️ 修改</button>` : ''}
+        ${a.canModify ? `<button class="btn-sm edit" data-id="${a.id}" data-action="modify">${ICON.edit}修改</button>` : ''}
         ${a.canModify ? `<button class="btn-sm cancel" data-id="${a.id}" data-phone="${escapeHtml(a.phone)}" data-action="cancel">🗑 取消</button>` : ''}
       </div>
       ${!a.canModify && !a.isPast ? '<div class="appt-deadline">⏰ 距预约不足2小时，无法修改/取消</div>' : ''}
@@ -447,12 +458,12 @@ function renderMyAppointments(appts) {
     return `
       <div class="appt-item ${statusClass}">
         <div class="appt-row">
-          <span class="appt-date">📅 ${a.appt_date}</span>
+          <span class="appt-date">${ICON.cal}${a.appt_date}</span>
           <span class="appt-slot">${a.time_slot}</span>
         </div>
         <div class="appt-row">
-          <span class="appt-name">👤 ${escapeHtml(a.name)}</span>
-          <span class="appt-name">📱 ${escapeHtml(a.phone)}</span>
+          <span class="appt-name">${ICON.user}${escapeHtml(a.name)}</span>
+          <span class="appt-name">${ICON.phone}${escapeHtml(a.phone)}</span>
         </div>
         ${actionsHTML}
       </div>
@@ -836,7 +847,7 @@ function renderSlotGroupsHtml(listBySlot) {
   for (const slot of SLOT_ORDER) {
     const list = listBySlot[slot] || [];
     html += `<div class="slot-group">`;
-    html += `<div class="slot-group-header">🕐 <strong>${slot}</strong> · ${list.length}人</div>`;
+    html += `<div class="slot-group-header">${ICON.clock}<strong>${slot}</strong> · ${list.length}人</div>`;
     if (list.length > 0) {
       html += `<table class="admin-table slot-table">
         <thead><tr><th>#</th><th>姓名</th><th>手机号</th><th>完成状态</th><th>操作</th></tr></thead>
@@ -931,7 +942,7 @@ async function loadAdminData(date, month) {
           if (!slotGroups[a.time_slot]) slotGroups[a.time_slot] = [];
           slotGroups[a.time_slot].push(a);
         }
-        return `<div class="admin-summary">📅 <strong>${d}</strong> · 共 ${groups[d].length} 人预约</div>` +
+        return `<div class="admin-summary">${ICON.cal}<strong>${d}</strong> · 共 ${groups[d].length} 人预约</div>` +
           renderSlotGroupsHtml(slotGroups) + '<div style="height:12px;"></div>';
       }).join('');
       return;
@@ -945,7 +956,7 @@ async function loadAdminData(date, month) {
     }
 
     wrap.innerHTML =
-      `<div class="admin-summary">📅 <strong>${date}</strong> · 共 ${data.appointments.length} 人预约</div>` +
+      `<div class="admin-summary">${ICON.cal}<strong>${date}</strong> · 共 ${data.appointments.length} 人预约</div>` +
       renderSlotGroupsHtml(slotGroups);
   } catch (e) {
     toast(e.message, 'error');
@@ -1070,7 +1081,7 @@ document.getElementById('btn-stat-query').addEventListener('click', async () => 
 
     // Per-name breakdown when fuzzy search matched multiple people
     if (multiName) {
-      html += `<div class="admin-summary" style="margin-top:12px;">👥 共 ${data.byName.length} 名患者，按人次排序</div>`;
+      html += `<div class="admin-summary" style="margin-top:12px;">${ICON.users}共 ${data.byName.length} 名患者，按人次排序</div>`;
       html += `<table class="admin-table">
         <thead><tr><th>姓名</th><th>总预约</th><th>已完成</th><th>未到场</th></tr></thead>
         <tbody>`;
@@ -1122,7 +1133,7 @@ async function loadBlockedDates() {
     list.innerHTML = data.blockedDates.map(b => `
       <div class="blocked-item">
         <div class="blocked-info">
-          <span class="blocked-date">📅 ${b.block_date}</span>
+          <span class="blocked-date">${ICON.cal}${b.block_date}</span>
           <span class="blocked-session-tag">${sessionLabels[b.session] || b.session}</span>
         </div>
         <button class="btn-sm cancel" onclick="removeBlockedDate(${b.id})">移除</button>

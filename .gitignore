@@ -6,3 +6,6 @@ bookings.json.backup
 batch-book.js
 phone-mapping.json
 .env
+
+# 设计截图与工具脚本（本地评审用）
+.design-shots/
