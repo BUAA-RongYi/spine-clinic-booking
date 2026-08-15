@@ -372,12 +372,12 @@ document.getElementById('btn-submit').addEventListener('click', async () => {
 
     saveUser(name, phone);
 
-    // Show success confirm card
+    // Show success confirm card（票据式：编号主角，日期中文格式，无手机号行）
     document.getElementById('form-overlay').style.display = 'none';
-    document.getElementById('success-date').textContent = state.selectedDate;
+    const [sy, sm, sd] = state.selectedDate.split('-');
+    document.getElementById('success-date').textContent = `${parseInt(sm)}月${parseInt(sd)}日`;
     document.getElementById('success-slot').textContent = state.selectedSlot;
     document.getElementById('success-name').textContent = name;
-    document.getElementById('success-phone').textContent = phone;
     document.getElementById('success-id').textContent = data.appointment ? data.appointment.id : '-';
     document.getElementById('success-overlay').style.display = 'flex';
 

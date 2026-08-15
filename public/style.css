@@ -885,64 +885,71 @@ select:focus-visible {
   font-size: 14px;
 }
 
-/* ── Success Card (就诊凭证) ──────────────────────────────────────────────── */
+/* ── Success Card (就诊凭证·票据式) ───────────────────────────────────────── */
+/* 居中窄卡片形态：区别于全宽底部抽屉表单 */
+#success-overlay { align-items: center; }
+#success-overlay .modal-box {
+  width: min(88%, 340px);
+  border-radius: 20px;
+  margin: 0 auto;
+}
+#success-overlay .modal-box::before { display: none; }
 .success-box {
   background: #fff;
-  padding: 28px 20px 24px;
+  padding: 22px 20px 16px;
   text-align: center;
 }
 .success-icon {
-  width: 64px; height: 64px;
+  width: 52px; height: 52px;
   border-radius: 50%;
   background: var(--green-bg);
   color: var(--green);
   display: flex; align-items: center; justify-content: center;
-  margin: 0 auto 12px;
+  margin: 0 auto 8px;
 }
-.success-icon svg { width: 32px; height: 32px; }
+.success-icon svg { width: 26px; height: 26px; }
 .success-title {
-  text-align: center;
-  font-size: 20px;
+  font-size: 18px;
   font-weight: 700;
-  margin: 0 0 14px;
+  margin: 0 0 12px;
 }
-.success-details {
+/* 票据主体：浅青底，编号为视觉主角 */
+.success-ticket {
   background: var(--primary-50);
   border-radius: var(--radius);
-  padding: 12px 16px;
-  margin: 0 0 12px;
-  text-align: left;
+  padding: 14px 16px 12px;
 }
-.success-row {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: 12px;
-  padding: 8px 0;
-  font-size: 14px;
+.success-id-label {
+  font-size: 12px;
   color: var(--gray-500);
-  border-bottom: 1px solid rgba(13, 148, 136, .12);
+  letter-spacing: 4px;
 }
-/* 图标与文字在同一 flex 行内居中，避免 svg 基线偏移 */
-.success-row span {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-}
-.success-row:last-child { border-bottom: none; }
-.success-row strong {
-  color: var(--gray-800);
-  font-weight: 600;
-  text-align: right;
-}
-/* 预约编号：凭证主角，大号突出 */
 #success-id {
-  font-size: 24px;
+  display: block;
+  font-size: 32px;
   font-weight: 800;
   color: var(--primary-dark);
-  letter-spacing: 1px;
+  letter-spacing: 2px;
+  line-height: 1.3;
   font-variant-numeric: tabular-nums;
 }
+.success-divider {
+  border-top: 1px dashed rgba(13, 148, 136, .35);
+  margin: 10px 0 8px;
+}
+.success-when {
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--gray-800);
+  font-variant-numeric: tabular-nums;
+}
+.success-when .sep { color: var(--gray-400); margin: 0 6px; font-weight: 400; }
+.success-name-line {
+  margin-top: 4px;
+  font-size: 13px;
+  color: var(--gray-500);
+}
+.success-name-line span { color: var(--gray-700); font-weight: 600; }
 .success-hint {
   display: inline-block;
   font-size: var(--fs-sm);
@@ -950,11 +957,11 @@ select:focus-visible {
   background: var(--orange-bg);
   padding: 6px 14px;
   border-radius: var(--pill);
-  margin: 0 0 4px;
+  margin: 14px 0 10px;
 }
 #success-close {
   width: 100%;
-  margin-top: 12px;
+  margin-top: 0;
 }
 
 /* ── Loading（查询中/加载中） ─────────────────────────────────────────────── */
