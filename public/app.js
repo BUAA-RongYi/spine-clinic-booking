@@ -99,6 +99,11 @@ function toast(msg, type = 'info') {
   el._timer = setTimeout(() => { el.style.display = 'none'; }, 2500);
 }
 
+/** Loading indicator markup */
+function loadingHtml(text = '查询中...') {
+  return `<div class="loading"><span class="spinner"></span>${text}</div>`;
+}
+
 /** Get user info from localStorage */
 function getSavedUser() {
   try {
@@ -138,6 +143,22 @@ document.querySelectorAll('.tab-btn').forEach((btn) => {
     if (tab === 'myappt') autoLoadMyAppointments();
     if (tab === 'admin')  autoLoadAdmin();
   });
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// NOTICE COLLAPSE（预约须知：首次自动展开，之后默认收起）
+// ═══════════════════════════════════════════════════════════════════════════
+
+const noticeCard = document.querySelector('.notice-card');
+const noticeHeader = document.querySelector('.notice-header');
+if (!localStorage.getItem('spine_notice_seen')) {
+  noticeCard.classList.add('open');
+  noticeHeader.setAttribute('aria-expanded', 'true');
+  localStorage.setItem('spine_notice_seen', '1');
+}
+noticeHeader.addEventListener('click', () => {
+  const open = noticeCard.classList.toggle('open');
+  noticeHeader.setAttribute('aria-expanded', String(open));
 });
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -417,7 +438,7 @@ async function autoLoadMyAppointments() {
   }
   document.getElementById('lookup-name').value = u.name;
   document.getElementById('lookup-phone').value = u.phone;
-  list.innerHTML = '<p style="text-align:center;color:var(--gray-600);padding:20px;">查询中...</p>';
+  list.innerHTML = loadingHtml();
   try {
     const data = await api('GET', `/api/appointments?phone=${encodeURIComponent(u.phone)}&name=${encodeURIComponent(u.name)}`);
     renderMyAppointments(data.appointments);
@@ -436,7 +457,7 @@ document.getElementById('btn-lookup').addEventListener('click', async () => {
   saveUser(name, phone);
 
   const list = document.getElementById('myappt-list');
-  list.innerHTML = '<p style="text-align:center;color:var(--gray-600);padding:20px;">查询中...</p>';
+  list.innerHTML = loadingHtml();
 
   try {
     const data = await api('GET', `/api/appointments?phone=${encodeURIComponent(phone)}&name=${encodeURIComponent(name)}`);
@@ -467,7 +488,10 @@ function renderMyAppointments(appts) {
       <div class="appt-item ${statusClass}">
         <div class="appt-row">
           <span class="appt-date">${ICON.cal}${a.appt_date}</span>
-          <span class="appt-slot">${a.time_slot}</span>
+          <span class="appt-right">
+            ${a.isPast ? '<span class="appt-badge-past">已过期</span>' : ''}
+            <span class="appt-slot">${a.time_slot}</span>
+          </span>
         </div>
         <div class="appt-row">
           <span class="appt-name">${ICON.user}${escapeHtml(a.name)}</span>
@@ -877,7 +901,7 @@ function renderSlotGroupsHtml(listBySlot) {
 
 async function loadAdminData(date, month) {
   const wrap = document.getElementById('admin-table-wrap');
-  wrap.innerHTML = '<p style="text-align:center;color:var(--gray-600);padding:20px;">查询中...</p>';
+  wrap.innerHTML = loadingHtml();
 
   try {
     let url = '/api/admin/appointments';
@@ -1069,7 +1093,7 @@ document.getElementById('btn-stat-query').addEventListener('click', async () => 
   if (!name) return toast('请输入患者姓名', 'error');
   if (!start || !end) return toast('请选择日期范围', 'error');
 
-  result.innerHTML = '<p style="text-align:center;color:var(--gray-600);padding:12px;">查询中...</p>';
+  result.innerHTML = loadingHtml();
 
   try {
     const data = await api('GET', `/api/admin/patient-stats?name=${encodeURIComponent(name)}&start=${start}&end=${end}`);

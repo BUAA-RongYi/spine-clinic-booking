@@ -193,17 +193,34 @@ select:focus-visible {
   background: var(--primary-50);
   border: 1px solid #99f6e4;
   border-radius: var(--radius-lg);
-  padding: 14px 16px;
+  padding: 12px 16px;
   margin-bottom: 12px;
 }
+/* 折叠交互：首次访问由 JS 自动展开（.open），之后默认收起 */
 .notice-header {
   display: flex; align-items: center; gap: 8px;
+  width: 100%;
+  border: none; background: none;
+  font-family: inherit;
   font-size: var(--fs-body);
   font-weight: 700;
   color: var(--primary-deep);
-  margin-bottom: 8px;
+  cursor: pointer;
+  padding: 2px 0;
+  text-align: left;
 }
 .notice-header .ico { width: 18px; height: 18px; color: var(--primary); }
+.notice-toggle {
+  margin-left: auto;
+  display: inline-flex;
+  font-size: 12px;
+  color: var(--primary);
+  transition: transform .2s;
+}
+.notice-card.open .notice-toggle { transform: rotate(180deg); }
+.notice-card.open .notice-header { margin-bottom: 8px; }
+.notice-body { display: none; }
+.notice-card.open .notice-body { display: block; }
 .notice-list {
   margin: 0;
   padding-left: 20px;
@@ -610,10 +627,16 @@ select:focus-visible {
 .appt-item .appt-row:last-child { margin-bottom: 0; }
 .appt-date { font-size: 17px; font-weight: 700; color: var(--gray-800); display: flex; align-items: center; gap: 5px; }
 .appt-date .ico-inline { color: var(--primary); width: 16px; height: 16px; }
+.appt-right { display: flex; align-items: center; gap: 6px; }
 .appt-slot {
   font-size: var(--fs-sm); color: var(--primary-dark); font-weight: 700;
   background: var(--primary-50);
   padding: 4px 10px; border-radius: var(--pill);
+}
+.appt-badge-past {
+  font-size: 11px; font-weight: 600;
+  color: var(--gray-500); background: var(--gray-100);
+  padding: 2px 8px; border-radius: var(--pill);
 }
 .appt-name { font-size: 14px; color: var(--gray-600); display: flex; align-items: center; gap: 6px; }
 .appt-actions { display: flex; gap: 8px; margin-top: 10px; }

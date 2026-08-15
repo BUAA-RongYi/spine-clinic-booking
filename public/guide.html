@@ -2,191 +2,264 @@
 <html lang="zh-CN">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <title>患者操作手册 - 脊柱侧弯门诊预约</title>
 <style>
+  /* ══ 设计 token：与主应用一致（青绿主题） ══ */
   :root {
-    --blue: #0d9488; --blue-dark: #0f766e; --blue-light: #ccfbf1;
+    --primary: #0d9488; --primary-dark: #0f766e; --primary-deep: #115e59;
+    --primary-light: #ccfbf1; --primary-50: #f0fdfa;
     --green: #16a34a; --green-bg: #dcfce7;
     --red: #dc2626; --red-bg: #fee2e2;
     --orange: #ea580c; --orange-bg: #fff7ed;
     --gray-50: #f9fafb; --gray-100: #f3f4f6; --gray-200: #e5e7eb;
-    --gray-400: #9ca3af; --gray-500: #6b7280;
+    --gray-300: #d1d5db; --gray-400: #9ca3af; --gray-500: #6b7280;
     --gray-600: #4b5563; --gray-700: #374151; --gray-800: #1f2937;
-    --radius: 12px; --radius-sm: 8px;
-    --shadow: 0 1px 3px rgba(0,0,0,.08);
+    --radius-lg: 16px; --radius: 12px; --radius-sm: 9px; --pill: 999px;
+    --shadow: 0 1px 2px rgba(15,23,42,.04), 0 2px 8px rgba(15,23,42,.05);
+    --shadow-md: 0 4px 16px rgba(15,23,42,.08);
   }
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body {
     font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
     background: #f0f6f5; color: var(--gray-800); line-height: 1.7;
-    max-width: 720px; margin: 0 auto; padding: 0 16px 40px;
+    max-width: 720px; margin: 0 auto; padding-bottom: 48px;
+    -webkit-font-smoothing: antialiased;
   }
+  .ico { display: inline-block; vertical-align: -2px; flex-shrink: 0; }
+  .ico-inline { display: inline-block; width: 15px; height: 15px; vertical-align: -2px; margin-right: 4px; }
 
+  /* ── 页头 ── */
   .page-header {
-    background: linear-gradient(135deg, var(--blue), var(--blue-dark));
-    color: #fff; padding: 28px 20px; margin: 0 -16px 24px;
-    text-align: center;
+    background: linear-gradient(135deg, #0f766e, #115e59);
+    color: #fff; padding: 28px 20px 26px;
+    text-align: center; border-radius: 0 0 24px 24px;
+    box-shadow: var(--shadow-md); position: relative; overflow: hidden;
   }
-  .page-header h1 { font-size: 22px; margin-bottom: 4px; }
-  .page-header p { font-size: 14px; opacity: .85; }
+  .page-header::before {
+    content: ''; position: absolute; width: 150px; height: 150px;
+    border-radius: 50%; background: rgba(255,255,255,.06); top: -70px; right: -45px;
+  }
+  .header-chip {
+    position: relative;
+    width: 48px; height: 48px; margin: 0 auto 8px;
+    border-radius: 14px; background: rgba(255,255,255,.15);
+    display: flex; align-items: center; justify-content: center; font-size: 26px;
+  }
+  .page-header h1 { position: relative; font-size: 22px; margin-bottom: 2px; }
+  .page-header p { position: relative; font-size: 14px; opacity: .85; }
 
+  /* ── 返回按钮 ── */
   .back-link {
-    display: inline-block; margin-bottom: 20px; color: var(--blue);
-    text-decoration: none; font-size: 14px; font-weight: 600;
+    display: inline-flex; align-items: center; gap: 6px;
+    margin: 16px 20px 4px; padding: 8px 16px;
+    background: #fff; border-radius: var(--pill);
+    box-shadow: var(--shadow);
+    color: var(--primary-dark); text-decoration: none;
+    font-size: 14px; font-weight: 600;
   }
+  .back-link .ico { width: 14px; height: 14px; }
+  .back-link:active { background: var(--primary-50); }
 
-  /* Section */
+  /* ── 内容区 ── */
+  main { padding: 12px 16px 0; }
+
+  /* ── 章节卡片 ── */
   .section {
-    background: #fff; border-radius: var(--radius);
+    background: #fff; border-radius: var(--radius-lg);
     box-shadow: var(--shadow); margin-bottom: 16px; overflow: hidden;
   }
   .section-header {
-    background: var(--blue); color: #fff;
-    padding: 12px 18px; font-size: 16px; font-weight: 700;
+    display: flex; align-items: center; gap: 8px;
+    background: var(--primary-50);
+    color: var(--primary-deep);
+    padding: 13px 18px; font-size: 16px; font-weight: 700;
+    border-bottom: 1px solid #99f6e4;
   }
-  .section-body { padding: 18px 18px 8px; }
-  .section-body > p { margin-bottom: 10px; font-size: 14px; color: var(--gray-700); }
+  .section-header .ico { width: 18px; height: 18px; color: var(--primary); }
+  .section-body { padding: 16px 18px 18px; }
+  .section-body > p { margin-bottom: 10px; font-size: 15px; color: var(--gray-700); }
 
-  /* Step */
+  /* ── 步骤 ── */
   .step { display: flex; gap: 12px; margin: 0 0 16px; align-items: flex-start; }
   .step-num {
-    width: 26px; height: 26px; background: var(--blue); color: #fff;
-    border-radius: 50%; text-align: center; line-height: 26px;
-    font-size: 13px; font-weight: 700; flex-shrink: 0; margin-top: 1px;
+    width: 28px; height: 28px; background: var(--primary); color: #fff;
+    border-radius: 50%; text-align: center; line-height: 28px;
+    font-size: 14px; font-weight: 700; flex-shrink: 0; margin-top: 1px;
   }
-  .step-text { flex: 1; font-size: 14px; color: var(--gray-700); }
+  .step-text { flex: 1; font-size: 15px; color: var(--gray-700); }
   .step-text strong { color: var(--gray-800); }
 
-  /* Phone mockup */
+  /* ── 手机示意框 ── */
   .phone-frame {
-    border: 2px solid var(--gray-200); border-radius: 16px;
-    overflow: hidden; margin: 10px 0; max-width: 320px;
-    box-shadow: 0 2px 8px rgba(0,0,0,.08);
+    border: 1.5px solid var(--gray-200); border-radius: 18px;
+    overflow: hidden; margin: 12px 0; max-width: 320px;
+    box-shadow: var(--shadow-md); margin-left: auto; margin-right: auto;
   }
   .phone-bar {
-    background: var(--blue); color: #fff;
-    padding: 6px 12px; font-size: 12px; text-align: center;
+    background: linear-gradient(135deg, #0f766e, #115e59); color: #fff;
+    padding: 10px 12px; font-size: 13px; font-weight: 700; text-align: center;
   }
   .phone-body { padding: 12px 14px; font-size: 13px; background: #fff; }
 
-  /* Calendar mockup */
+  /* 日历示意 */
   .cal-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 3px; text-align: center; }
-  .cal-cell { padding: 4px 2px; font-size: 12px; }
+  .cal-cell {
+    padding: 5px 1px; font-size: 12px; border-radius: 8px;
+    border: 1.5px solid transparent; line-height: 1.3;
+  }
+  .cal-cell.today { border-color: var(--primary); }
+  .cal-cell.sel { background: var(--primary); color: #fff; }
   .cal-badge {
-    display: block; margin: 2px auto 0; padding: 1px 4px; border-radius: 6px;
-    font-size: 10px; font-weight: 600; width: fit-content; line-height: 1.4;
+    display: block; margin: 2px auto 0; padding: 1px 5px; border-radius: var(--pill);
+    font-size: 10px; font-weight: 600; width: fit-content; line-height: 1.5;
   }
   .cal-badge.g { background: var(--green-bg); color: var(--green); }
-  .cal-badge.f { background: var(--gray-100); color: var(--gray-400); }
+  .cal-badge.f { background: var(--gray-100); color: var(--gray-500); }
   .cal-badge.o { background: var(--orange-bg); color: var(--orange); }
+  .cal-cell.sel .cal-badge { background: rgba(255,255,255,.28); color: #fff; }
+  .legend-row { display: flex; gap: 12px; justify-content: center; margin-top: 8px; font-size: 11px; color: var(--gray-500); }
+  .legend-row span { display: flex; align-items: center; gap: 4px; }
+  .dot { width: 7px; height: 7px; border-radius: 50%; display: inline-block; }
 
-  /* Slot mockup */
+  /* 时段示意（与新 UI 一致） */
   .slot-row {
     display: flex; justify-content: space-between; align-items: center;
-    padding: 7px 10px; border-radius: 6px; margin: 3px 0; font-size: 12px;
-    border: 1.5px solid var(--gray-200); border-left: 4px solid var(--green);
+    padding: 8px 12px; border-radius: var(--radius-sm); margin: 4px 0; font-size: 12.5px;
+    border: 1.5px solid var(--gray-200); background: #fff;
   }
-  .slot-row.f { border-left-color: var(--gray-400); color: var(--gray-400); }
-  .slot-row.b { border-left-color: var(--orange); color: var(--orange); background: var(--orange-bg); }
-  .slot-row .num { font-weight: 700; color: var(--green); }
+  .slot-row.a { border-color: var(--primary-light); }
+  .slot-row.a::after { content: '›'; font-size: 16px; color: var(--primary); font-weight: 600; }
+  .slot-row.f { background: var(--gray-50); color: var(--gray-400); }
+  .slot-row.b { border-color: var(--orange); background: var(--orange-bg); color: var(--gray-500); }
+  .slot-row .num { font-weight: 700; color: var(--primary-dark); }
   .slot-row.f .num { color: var(--gray-400); }
+  .slot-row.b .num { color: var(--orange); }
 
-  /* Form mockup */
-  .mock-form .mf-row { display: flex; justify-content: space-between; padding: 4px 0; font-size: 13px; }
+  /* 表单示意 */
+  .mock-form .mf-row {
+    display: flex; justify-content: space-between; align-items: center;
+    padding: 8px 12px; margin: 4px 0; font-size: 13px;
+    background: var(--primary-50); border-radius: var(--radius-sm);
+  }
   .mock-form input {
-    width: 100%; padding: 7px 10px; border: 2px solid var(--gray-200);
-    border-radius: 6px; font-size: 12px; margin: 4px 0 8px; background: #fff;
+    width: 100%; height: 40px; padding: 0 12px; border: 1.5px solid var(--gray-300);
+    border-radius: var(--radius-sm); font-size: 13px; margin: 5px 0; background: #fff;
   }
   .mock-btn {
-    display: block; width: 100%; padding: 10px; border-radius: 8px;
-    background: var(--blue); color: #fff; text-align: center;
+    display: block; width: 100%; height: 44px; border-radius: var(--radius);
+    background: linear-gradient(180deg, var(--primary), var(--primary-dark));
+    color: #fff; text-align: center; line-height: 44px;
     font-size: 14px; font-weight: 600; margin-top: 8px;
   }
 
-  /* Appt list mockup */
+  /* 预约卡示意 */
   .appt-card {
-    background: #fff; border-radius: 8px; padding: 10px 12px;
-    margin: 6px 0; box-shadow: 0 1px 2px rgba(0,0,0,.05);
-    border-left: 3px solid var(--blue);
+    background: #fff; border-radius: var(--radius);
+    padding: 10px 12px; margin: 6px 0; box-shadow: var(--shadow);
+    border-left: 4px solid var(--primary);
   }
-  .appt-card .row { display: flex; justify-content: space-between; font-size: 13px; }
+  .appt-card.past { border-left-color: var(--gray-300); opacity: .65; }
+  .appt-card .row { display: flex; justify-content: space-between; align-items: center; font-size: 13px; }
   .appt-card .actions { margin-top: 6px; display: flex; gap: 6px; }
   .appt-card .act {
-    padding: 2px 10px; border-radius: 4px; font-size: 11px; font-weight: 600;
+    padding: 3px 12px; border-radius: var(--pill); font-size: 11px; font-weight: 600;
   }
-  .act.edit { background: var(--blue-light); color: var(--blue); }
+  .act.edit { background: var(--primary-50); color: var(--primary-dark); }
   .act.del { background: var(--red-bg); color: var(--red); }
-
-  /* Tip box */
-  .tip {
-    background: var(--orange-bg); border-left: 4px solid var(--orange);
-    padding: 10px 14px; border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
-    margin: 14px 0 4px; font-size: 13px; color: var(--orange);
+  .act-past {
+    display: inline-block; font-size: 10px; font-weight: 600;
+    color: var(--gray-500); background: var(--gray-100);
+    padding: 1px 8px; border-radius: var(--pill);
   }
 
-  /* Notice card mockup */
+  /* 须知卡示意 */
   .notice-mock {
-    background: var(--blue-light); padding: 10px 12px; border-radius: 8px;
-    font-size: 11px; margin-bottom: 10px; line-height: 1.8;
+    background: var(--primary-50); border: 1px solid #99f6e4;
+    padding: 10px 12px; border-radius: var(--radius);
+    font-size: 12px; margin-bottom: 10px; line-height: 1.8;
   }
+  .notice-mock .nm-head { display: flex; justify-content: space-between; font-weight: 700; color: var(--primary-deep); font-size: 13px; }
+
+  /* 提示框 */
+  .tip {
+    background: var(--orange-bg); border-radius: var(--radius);
+    padding: 10px 14px; margin: 14px 0 4px;
+    font-size: 13.5px; color: #9a3412;
+    display: flex; align-items: flex-start; gap: 8px;
+  }
+  .tip .ico { width: 16px; height: 16px; color: var(--orange); margin-top: 3px; }
 
   /* FAQ */
-  .faq-item { margin-bottom: 12px; }
-  .faq-q { font-weight: 700; font-size: 14px; color: var(--blue); margin-bottom: 2px; }
-  .faq-a { font-size: 14px; color: var(--gray-600); padding-left: 8px; border-left: 2px solid var(--gray-200); }
+  .faq-item { margin-bottom: 14px; }
+  .faq-q {
+    display: flex; align-items: flex-start; gap: 8px;
+    font-weight: 700; font-size: 14.5px; color: var(--gray-800); margin-bottom: 4px;
+  }
+  .faq-q .ico { width: 16px; height: 16px; color: var(--primary); margin-top: 4px; }
+  .faq-a {
+    font-size: 14px; color: var(--gray-600);
+    padding-left: 26px;
+  }
 
-  hr { border: none; border-top: 1px solid var(--gray-200); margin: 14px 0; }
+  hr { border: none; border-top: 1px solid var(--gray-200); margin: 12px 0; }
+
+  .page-foot {
+    text-align: center; padding: 8px 16px 24px;
+    font-size: 12px; color: var(--gray-500);
+  }
 
   @media (min-width: 481px) {
-    .page-header { border-radius: 0 0 var(--radius) var(--radius); margin: 0 0 24px; }
+    .page-header { border-radius: 0 0 24px 24px; }
   }
 </style>
 </head>
 <body>
 
 <div class="page-header">
-  <h1>📋 患者操作手册</h1>
+  <div class="header-chip">🏥</div>
+  <h1>患者操作手册</h1>
   <p>脊柱侧弯门诊预约系统</p>
 </div>
 
-<a href="/" class="back-link">← 返回预约首页</a>
+<a href="/" class="back-link">
+  <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M15 5l-7 7 7 7"/></svg>
+  返回预约首页
+</a>
+
+<main>
 
 <!-- ===== 1. 首页概览 ===== -->
 <div class="section">
-  <div class="section-header">1. 首页概览</div>
+  <div class="section-header">
+    <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M12 8h.01M12 11v5"/></svg>
+    1. 首页概览
+  </div>
   <div class="section-body">
-    <p>打开网站即进入预约页面，由上到下依次为：<strong>预约须知</strong> → <strong>日历选日期</strong> → <strong>时段选择</strong>。</p>
+    <p>打开网站即进入预约页面：<strong>预约须知</strong>（可折叠）→ <strong>日历选日期</strong> → <strong>时段选择</strong>。</p>
 
     <div class="phone-frame">
       <div class="phone-bar">🏥 脊柱侧弯门诊预约</div>
       <div class="phone-body">
-
-        <!-- Notice -->
         <div class="notice-mock">
-          <strong>📋 预约须知</strong><br>
-          1. 开放30天内号源，每天5个时段，每时段限额8人<br>
-          2. 同一手机号每天限约1次<br>
-          3. 修改/取消需提前2小时操作<br>
-          4. 停诊日期显示"已屏蔽"
+          <div class="nm-head"><span>预约须知</span><span>▾</span></div>
+          首次打开自动展开，之后默认收起，点击标题可展开查看
         </div>
-
-        <!-- Calendar -->
-        <div style="text-align:center;font-size:13px;font-weight:700;margin:6px 0;">◀ 2026年 8月 ▶</div>
+        <div style="display:flex;justify-content:space-between;align-items:center;margin:6px 2px;">
+          <span style="font-size:12px;color:var(--gray-400);">◀</span>
+          <strong style="font-size:13px;">2026年 8月</strong>
+          <span style="font-size:12px;color:var(--gray-400);">▶</span>
+        </div>
         <div style="display:grid;grid-template-columns:repeat(7,1fr);color:var(--gray-400);font-size:10px;text-align:center;margin-bottom:2px;">
           <span>日</span><span>一</span><span>二</span><span>三</span><span>四</span><span>五</span><span>六</span>
         </div>
         <div class="cal-grid">
-          <span class="cal-cell"></span>
-          <span class="cal-cell"></span>
-          <span class="cal-cell"></span>
-          <span class="cal-cell"></span>
-          <span class="cal-cell"></span>
-          <span class="cal-cell"></span>
+          <span class="cal-cell"></span><span class="cal-cell"></span><span class="cal-cell"></span>
+          <span class="cal-cell"></span><span class="cal-cell"></span><span class="cal-cell"></span>
           <span class="cal-cell">1<br><span class="cal-badge f">满</span></span>
           <span class="cal-cell">2<br><span class="cal-badge f">满</span></span>
-          <span class="cal-cell">3<br><span class="cal-badge g">剩8</span></span>
-          <span class="cal-cell">4<br><span class="cal-badge g">剩5</span></span>
+          <span class="cal-cell today">3<br><span class="cal-badge g">剩8</span></span>
+          <span class="cal-cell sel">4<br><span class="cal-badge g">剩5</span></span>
           <span class="cal-cell">5<br><span class="cal-badge g">剩3</span></span>
           <span class="cal-cell">6<br><span class="cal-badge f">满</span></span>
           <span class="cal-cell">7<br><span class="cal-badge g">剩6</span></span>
@@ -198,57 +271,67 @@
           <span class="cal-cell">13<br><span class="cal-badge g">剩7</span></span>
           <span class="cal-cell">14<br><span class="cal-badge g">剩8</span></span>
         </div>
-        <div style="font-size:10px;color:var(--gray-400);margin-top:6px;text-align:center;display:flex;gap:10px;justify-content:center;">
-          <span>● 可预约</span><span>● 已约满</span><span>● 已屏蔽</span>
+        <div class="legend-row">
+          <span><i class="dot" style="background:var(--green);"></i>可预约</span>
+          <span><i class="dot" style="background:var(--gray-400);"></i>已约满</span>
+          <span><i class="dot" style="background:var(--orange);"></i>已屏蔽</span>
         </div>
       </div>
     </div>
 
-    <p style="margin-top:8px;">
-      <span style="background:var(--green-bg);color:var(--green);padding:0 6px;border-radius:4px;font-size:12px;">剩N</span> = 可预约，数字为剩余名额 &nbsp;
-      <span style="background:var(--gray-100);color:var(--gray-400);padding:0 6px;border-radius:4px;font-size:12px;">满</span> = 已约满 &nbsp;
-      <span style="background:var(--orange-bg);color:var(--orange);padding:0 6px;border-radius:4px;font-size:12px;">屏蔽</span> = 停诊
+    <p style="margin-top:8px;font-size:13.5px;">
+      <span style="background:var(--green-bg);color:var(--green);padding:0 6px;border-radius:var(--pill);font-size:12px;">剩N</span> = 可预约，数字为剩余名额 ·
+      <span style="background:var(--gray-100);color:var(--gray-500);padding:0 6px;border-radius:var(--pill);font-size:12px;">满</span> = 已约满 ·
+      <span style="background:var(--orange-bg);color:var(--orange);padding:0 6px;border-radius:var(--pill);font-size:12px;">屏蔽</span> = 停诊 ·
+      描边 = 今天，青绿实底 = 已选中
     </p>
   </div>
 </div>
 
 <!-- ===== 2. 如何预约 ===== -->
 <div class="section">
-  <div class="section-header">2. 如何预约</div>
+  <div class="section-header">
+    <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="16" rx="3"/><path d="M3 10h18M8 3v4M16 3v4"/></svg>
+    2. 如何预约
+  </div>
   <div class="section-body">
 
     <div class="step">
       <div class="step-num">1</div>
-      <div class="step-text"><strong>点击日期</strong> — 在日历中选择一个显示<strong style="color:var(--green);">绿色数字</strong>的日期，选中后高亮为蓝色。</div>
+      <div class="step-text"><strong>点击日期</strong> — 在日历中选择一个带<strong style="color:var(--green);">「剩N」角标</strong>的日期，选中后整格变为青绿色。</div>
     </div>
 
     <div class="step">
       <div class="step-num">2</div>
-      <div class="step-text"><strong>选择时段</strong> — 下方出现当天 5 个时间段。点击<strong style="color:var(--green);">绿色左边框</strong>的时段进入预约。</div>
+      <div class="step-text"><strong>选择时段</strong> — 下方出现当天 5 个时间段，点击带 <strong style="color:var(--primary);">› 箭头</strong>的时段进入预约。</div>
     </div>
 
     <div class="phone-frame">
       <div class="phone-body">
-        <div style="font-weight:600;margin-bottom:6px;">🕐 2026-08-10 时间段</div>
-        <div class="slot-row"><span>8:30-9:30</span><span>剩余 <span class="num">8</span> 人</span></div>
-        <div class="slot-row"><span>9:30-10:30</span><span>剩余 <span class="num">5</span> 人</span></div>
-        <div class="slot-row"><span>10:30-11:30</span><span>剩余 <span class="num">3</span> 人</span></div>
-        <div class="slot-row f"><span>15:00-16:00</span><span>剩余 <span class="num">0</span> 人（已满）</span></div>
-        <div class="slot-row b"><span>16:00-17:00</span><span>🚫 已屏蔽</span></div>
+        <div style="font-weight:700;font-size:13px;margin-bottom:6px;">2026-08-10 时间段</div>
+        <div class="slot-row a"><span><strong>8:30-9:30</strong></span><span>剩余 <span class="num">8</span> 人</span></div>
+        <div class="slot-row a"><span><strong>9:30-10:30</strong></span><span>剩余 <span class="num">3</span> 人</span></div>
+        <div class="slot-row f"><span><strong>10:30-11:30</strong></span><span>剩余 <span class="num">0</span> 人</span></div>
+        <div class="slot-row a"><span><strong>15:00-16:00</strong></span><span>剩余 <span class="num">1</span> 人</span></div>
+        <div class="slot-row b"><span><strong>16:00-17:00</strong></span><span><span class="num">已屏蔽</span></span></div>
       </div>
     </div>
 
     <div class="step" style="margin-top:14px;">
       <div class="step-num">3</div>
-      <div class="step-text"><strong>填写姓名和手机号</strong>，点击"确认预约"即可。首次填写后浏览器会记住信息，下次自动填充。</div>
+      <div class="step-text"><strong>填写姓名和手机号</strong>，点击"确认预约"。首次填写后浏览器会记住信息，下次自动填充。预约成功后请<strong>截图保存</strong>成功卡片，就诊时出示。</div>
     </div>
 
     <div class="phone-frame">
       <div class="phone-body">
         <div class="mock-form">
-          <div style="font-weight:600;margin-bottom:8px;">确认预约信息</div>
-          <div class="mf-row"><span>📅 日期</span><strong>2026-08-10</strong></div>
-          <div class="mf-row"><span>🕐 时间段</span><strong>8:30-9:30</strong></div>
+          <div style="font-weight:700;font-size:13px;margin-bottom:8px;">确认预约信息</div>
+          <div class="mf-row"><span>
+            <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="16" rx="3"/><path d="M3 10h18M8 3v4M16 3v4"/></svg>
+            日期</span><strong>2026-08-10</strong></div>
+          <div class="mf-row"><span>
+            <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>
+            时间段</span><strong>8:30-9:30</strong></div>
           <input type="text" value="张三" readonly>
           <input type="tel" value="138****5678" readonly>
           <div class="mock-btn">确认预约</div>
@@ -261,74 +344,102 @@
 
 <!-- ===== 3. 我的预约 ===== -->
 <div class="section">
-  <div class="section-header">3. 查看 / 修改 / 取消预约</div>
+  <div class="section-header">
+    <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="5" y="4" width="14" height="17" rx="3"/><path d="M9 9h6M9 13h6M9 17h4"/></svg>
+    3. 查看 / 修改 / 取消预约
+  </div>
   <div class="section-body">
-    <p>点击顶部 <strong>"📋 我的预约"</strong>，输入手机号即可查询所有预约：</p>
+    <p>点击顶部 <strong>"我的预约"</strong>，输入手机号即可查询所有预约：</p>
 
     <div class="phone-frame">
       <div class="phone-body">
-        <input type="tel" value="138****5678" readonly style="margin-bottom:6px;">
+        <input type="tel" value="138****5678" readonly style="width:100%;height:40px;padding:0 12px;border:1.5px solid var(--gray-300);border-radius:var(--radius-sm);font-size:13px;margin-bottom:6px;">
         <div class="mock-btn" style="margin-top:0;">查询预约</div>
         <hr>
         <div class="appt-card">
-          <div class="row"><span><strong>📅 2026-08-10</strong></span><span>8:30-9:30</span></div>
-          <div class="row" style="margin-top:2px;"><span>👤 张三</span><span>📱 138****5678</span></div>
+          <div class="row"><span><strong>2026-08-10</strong></span><span style="background:var(--primary-50);color:var(--primary-dark);padding:2px 10px;border-radius:var(--pill);font-weight:700;font-size:11px;">8:30-9:30</span></div>
+          <div class="row" style="margin-top:4px;color:var(--gray-600);"><span>张三</span><span>138****5678</span></div>
           <div class="actions">
-            <span class="act edit">✏️ 修改</span>
-            <span class="act del">🗑 取消</span>
+            <span class="act edit">修改</span>
+            <span class="act del">取消</span>
           </div>
         </div>
-        <div class="appt-card" style="border-left-color:var(--gray-400);opacity:.7;">
-          <div class="row"><span><strong>📅 2026-08-15</strong></span><span>15:00-16:00</span></div>
-          <div class="row" style="margin-top:2px;"><span>👤 张三</span><span>📱 138****5678</span></div>
-          <div style="font-size:11px;color:var(--orange);margin-top:4px;">⏰ 距预约不足2小时，无法修改/取消</div>
+        <div class="appt-card past">
+          <div class="row"><span><strong>2026-08-02</strong></span><span style="display:flex;gap:6px;align-items:center;"><span class="act-past">已过期</span><span style="background:var(--gray-100);color:var(--gray-500);padding:2px 10px;border-radius:var(--pill);font-weight:700;font-size:11px;">15:00-16:00</span></span></div>
+          <div class="row" style="margin-top:4px;color:var(--gray-600);"><span>张三</span><span>138****5678</span></div>
         </div>
       </div>
     </div>
 
     <p style="margin-top:10px;">
-      <strong>修改</strong> → 点击 ✏️ 修改，选择新日期时段后确认；
-      <strong>取消</strong> → 点击 🗑 取消，确认后即刻释放名额。
+      <strong>修改</strong> → 点击「修改」按钮，选择新日期时段后确认；
+      <strong>取消</strong> → 点击「取消」按钮，确认后即刻释放名额。
     </p>
 
-    <div class="tip">⚠️ 距预约时间<strong>不足 2 小时</strong>时，无法修改或取消。</div>
+    <div class="tip">
+      <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 9v4M12 17h.01"/><path d="M10.3 3.6 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.6a2 2 0 0 0-3.4 0z"/></svg>
+      <span>距预约时间<strong>不足 2 小时</strong>时，无法修改或取消；时段开始后显示"已截止"。</span>
+    </div>
   </div>
 </div>
 
 <!-- ===== 4. 常见问题 ===== -->
 <div class="section">
-  <div class="section-header">4. 常见问题</div>
+  <div class="section-header">
+    <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg>
+    4. 常见问题
+  </div>
   <div class="section-body">
 
     <div class="faq-item">
-      <div class="faq-q">❓ 为什么某天不能选？</div>
+      <div class="faq-q">
+        <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M9.5 9a2.5 2.5 0 1 1 3.6 2.2c-.8.4-1.1.9-1.1 1.8M12 17h.01"/></svg>
+        为什么某天不能选？
+      </div>
       <div class="faq-a">超出30天范围、当天全部约满、或管理员已屏蔽（停诊）。</div>
     </div>
 
     <div class="faq-item">
-      <div class="faq-q">❓ 可以一天约多个时段吗？</div>
+      <div class="faq-q">
+        <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M9.5 9a2.5 2.5 0 1 1 3.6 2.2c-.8.4-1.1.9-1.1 1.8M12 17h.01"/></svg>
+        可以一天约多个时段吗？
+      </div>
       <div class="faq-a">不可以。同一手机号每天只能预约 <strong>1 个</strong>时段。</div>
     </div>
 
     <div class="faq-item">
-      <div class="faq-q">❓ 预约后没截图怎么办？</div>
+      <div class="faq-q">
+        <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M9.5 9a2.5 2.5 0 1 1 3.6 2.2c-.8.4-1.1.9-1.1 1.8M12 17h.01"/></svg>
+        预约后没截图怎么办？
+      </div>
       <div class="faq-a">进入"我的预约"，输入手机号即可查看所有记录和编号。</div>
     </div>
 
     <div class="faq-item">
-      <div class="faq-q">❓ 为什么提示"该手机号当天已预约"？</div>
+      <div class="faq-q">
+        <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M9.5 9a2.5 2.5 0 1 1 3.6 2.2c-.8.4-1.1.9-1.1 1.8M12 17h.01"/></svg>
+        为什么提示"该手机号当天已预约"？
+      </div>
       <div class="faq-a">该手机号当天已有预约。如需更换，请先取消原预约再重新预约。</div>
     </div>
 
     <div class="faq-item">
-      <div class="faq-q">❓ 预约后未到场会怎样？</div>
+      <div class="faq-q">
+        <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M9.5 9a2.5 2.5 0 1 1 3.6 2.2c-.8.4-1.1.9-1.1 1.8M12 17h.01"/></svg>
+        预约后未到场会怎样？
+      </div>
       <div class="faq-a">管理员标记"未到场"后，名额将自动释放给其他患者。</div>
     </div>
 
   </div>
 </div>
 
-<a href="/" class="back-link" style="display:block;text-align:center;margin-bottom:40px;">← 返回预约首页</a>
+</main>
+
+<div class="page-foot">
+  <a href="/" class="back-link" style="margin:0 0 12px;">返回预约首页</a><br>
+  脊柱侧弯门诊 · 预约时间 8:30-11:30 / 15:00-17:00
+</div>
 
 </body>
 </html>
