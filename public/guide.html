@@ -26,7 +26,7 @@
     max-width: 720px; margin: 0 auto; padding-bottom: 48px;
     -webkit-font-smoothing: antialiased;
   }
-  .ico { display: inline-block; vertical-align: -2px; flex-shrink: 0; }
+  .ico { display: inline-block; width: 15px; height: 15px; vertical-align: -2px; flex-shrink: 0; }
   .ico-inline { display: inline-block; width: 15px; height: 15px; vertical-align: -2px; margin-right: 4px; }
 
   /* ── 页头 ── */
@@ -142,6 +142,7 @@
     padding: 8px 12px; margin: 4px 0; font-size: 13px;
     background: var(--primary-50); border-radius: var(--radius-sm);
   }
+  .mock-form .mf-row span { display: flex; align-items: center; gap: 5px; }
   .mock-form input {
     width: 100%; height: 40px; padding: 0 12px; border: 1.5px solid var(--gray-300);
     border-radius: var(--radius-sm); font-size: 13px; margin: 5px 0; background: #fff;
@@ -151,6 +152,37 @@
     background: linear-gradient(180deg, var(--primary), var(--primary-dark));
     color: #fff; text-align: center; line-height: 44px;
     font-size: 14px; font-weight: 600; margin-top: 8px;
+  }
+
+  /* 成功凭证卡示意（票据式窄卡片） */
+  .succ-dim { background: rgba(15,23,42,.45); border-radius: 12px; padding: 16px 12px; }
+  .succ-card {
+    background: #fff; border-radius: 16px; padding: 14px 12px 10px;
+    text-align: center; max-width: 250px; margin: 0 auto;
+  }
+  .succ-check {
+    width: 38px; height: 38px; border-radius: 50%;
+    background: var(--green-bg); color: var(--green);
+    display: flex; align-items: center; justify-content: center; margin: 0 auto 6px;
+  }
+  .succ-check svg { width: 19px; height: 19px; }
+  .succ-title { font-size: 15px; font-weight: 700; margin-bottom: 8px; }
+  .succ-ticket { background: var(--primary-50); border-radius: 10px; padding: 10px 12px 8px; }
+  .succ-id-label { font-size: 10px; color: var(--gray-500); letter-spacing: 3px; }
+  .succ-id { font-size: 24px; font-weight: 800; color: var(--primary-dark); letter-spacing: 2px; line-height: 1.35; }
+  .succ-divider { border-top: 1px dashed rgba(13,148,136,.35); margin: 7px 0 6px; }
+  .succ-when { font-size: 13px; font-weight: 700; color: var(--gray-800); }
+  .succ-when .sep { color: var(--gray-400); margin: 0 4px; font-weight: 400; }
+  .succ-name { font-size: 11px; color: var(--gray-500); margin-top: 2px; }
+  .succ-hint {
+    display: inline-block; font-size: 10px; color: var(--orange);
+    background: var(--orange-bg); padding: 3px 10px; border-radius: var(--pill);
+    margin: 9px 0 6px;
+  }
+  .succ-btn {
+    height: 32px; border-radius: 9px; line-height: 32px;
+    background: linear-gradient(180deg, var(--primary), var(--primary-dark));
+    color: #fff; font-size: 12px; font-weight: 600;
   }
 
   /* 预约卡示意 */
@@ -208,6 +240,7 @@
     text-align: center; padding: 8px 16px 24px;
     font-size: 12px; color: var(--gray-500);
   }
+  .page-foot .back-link { margin: 0 0 12px; }
 
   @media (min-width: 481px) {
     .page-header { border-radius: 0 0 24px 24px; }
@@ -319,7 +352,7 @@
 
     <div class="step" style="margin-top:14px;">
       <div class="step-num">3</div>
-      <div class="step-text"><strong>填写姓名和手机号</strong>，点击"确认预约"。首次填写后浏览器会记住信息，下次自动填充。预约成功后请<strong>截图保存</strong>成功卡片，就诊时出示。</div>
+      <div class="step-text"><strong>填写姓名和手机号</strong>，点击"确认预约"。首次填写后浏览器会记住信息，下次自动填充。</div>
     </div>
 
     <div class="phone-frame">
@@ -335,6 +368,33 @@
           <input type="text" value="张三" readonly>
           <input type="tel" value="138****5678" readonly>
           <div class="mock-btn">确认预约</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="step" style="margin-top:14px;">
+      <div class="step-num">4</div>
+      <div class="step-text"><strong>截图保存凭证</strong> — 预约成功后弹出票据式凭证卡，<strong style="color:var(--primary-dark);">编号</strong>是就诊凭证。请<strong>截图保存</strong>或届时直接出示此卡片。</div>
+    </div>
+
+    <div class="phone-frame">
+      <div class="phone-body" style="background:var(--gray-100);">
+        <div class="succ-dim">
+          <div class="succ-card">
+            <div class="succ-check">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 13l4 4L19 7"/></svg>
+            </div>
+            <div class="succ-title">预约成功</div>
+            <div class="succ-ticket">
+              <div class="succ-id-label">预约编号</div>
+              <div class="succ-id">1001</div>
+              <div class="succ-divider"></div>
+              <div class="succ-when">8月18日<span class="sep">·</span>9:30-10:30</div>
+              <div class="succ-name">预约人 张小明</div>
+            </div>
+            <div class="succ-hint">请截图保存，就诊时出示</div>
+            <div class="succ-btn">知道了</div>
+          </div>
         </div>
       </div>
     </div>
@@ -437,7 +497,7 @@
 </main>
 
 <div class="page-foot">
-  <a href="/" class="back-link" style="margin:0 0 12px;">返回预约首页</a><br>
+  <a href="/" class="back-link">返回预约首页</a><br>
   脊柱侧弯门诊 · 预约时间 8:30-11:30 / 15:00-17:00
 </div>
 
